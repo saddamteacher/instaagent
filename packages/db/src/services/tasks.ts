@@ -121,7 +121,9 @@ async function buildPayload(ctx: Ctx, task: Task, result: unknown, username: str
       throw new DomainError("invalid_input", "Nashr uchun caption yoki media kerak (content_save yoki result.caption)");
     for (const u of mediaUrls)
       if (!/^https:\/\//.test(u)) throw new DomainError("invalid_input", `Media havolasi https bo'lishi kerak: ${u}`);
-    return { kind: "publish", type, caption, hashtags, mediaUrls, scheduledAt, contentItemId: item?.id ?? null };
+    const audioUrl = item?.audioUrl ?? (str(r.audioUrl) || null);
+    if (audioUrl && !/^https:\/\//.test(audioUrl)) throw new DomainError("invalid_input", `Ovoz havolasi https bo'lishi kerak: ${audioUrl}`);
+    return { kind: "publish", type, caption, hashtags, mediaUrls, audioUrl, scheduledAt, contentItemId: item?.id ?? null };
   }
   assertOwnTarget(task, result, username);
   return {

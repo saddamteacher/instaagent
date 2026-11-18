@@ -19,4 +19,6 @@ export * as oauth from "./services/oauth";
 export * as actions from "./services/actions";
 export * as graph from "./services/graph";
 export * as schedules from "./services/schedules";
+export * as billing from "./services/billing";
+export * as commands from "./services/commands";
 export type { OfficeState } from "./services/office";

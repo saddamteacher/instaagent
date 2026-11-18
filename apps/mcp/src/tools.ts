@@ -18,6 +18,7 @@ import {
   accounts,
   actions,
   agents,
+  commands,
   graph,
   schedules,
   analytics,
@@ -147,10 +148,13 @@ export const buildTools = (deps: ToolDeps) => [
     input: {
       command: z.string().min(1).max(2000).describe("Foydalanuvchi buyrug'i (asl matn)"),
       accountId: z.string().optional().describe("Berilmasa — faol akkaunt"),
+      commandId: z.string().optional().describe("due_list.commands dan kelgan buyruq id (veb-ofis/ovoz)"),
     },
     mutating: true,
     run: async (ctx, a) => {
+      if (a.commandId) await commands.assertNewCommand(ctx, a.commandId);
       const m = await meetings.startMeeting(ctx, a);
+      if (a.commandId) await commands.takeCommand(ctx, a.commandId, m.id);
       return {
         data: { meeting: m, roles: ROLE_LIST.map((g) => ({ role: g.role, title: g.title, count: g.count, kinds: g.allowedKinds })) },
         log: { message: `Jarvis majlis chaqirdi: "${m.command}"`, data: { meetingId: m.id }, bubble: "Hamma majlis zaliga!" },
@@ -165,6 +169,7 @@ export const buildTools = (deps: ToolDeps) => [
     mutating: true,
     run: async (ctx, a) => {
       const m = await meetings.endMeeting(ctx, a);
+      await commands.finishForMeeting(ctx, m.id);
       const n = await ctx.db.task.count({ where: { meetingId: m.id } });
       return { data: { meeting: m, tasksCreated: n }, log: { message: `Majlis tugadi: ${n} ta vazifa taqsimlandi`, bubble: "Ishga!" } };
     },
@@ -291,6 +296,7 @@ export const buildTools = (deps: ToolDeps) => [
       caption: z.string().max(2200),
       hashtags: z.array(z.string()).max(30).optional(),
       mediaUrl: z.url().optional(),
+      audioUrl: z.url().optional().describe("Voiceover (masalan ElevenLabs MCP natijasi), https"),
       scheduledAt: isoDate.nullable().optional(),
     },
     mutating: true,
@@ -549,7 +555,7 @@ export const buildTools = (deps: ToolDeps) => [
     name: "due_list",
     title: "Vaqti kelgan ishlar",
     description:
-      "What needs Jarvis now: tasks created by schedules that are still queued, and APPROVED Instagram actions whose scheduled time has come (Chrome accounts: execute via action_begin → Chrome → action_complete; graph_api accounts are published by the server automatically). Call at the start of every session, after office_state.",
+      "What needs Jarvis now: commands the user gave in the web office by text or voice (start each with meeting_start(command, commandId)), tasks created by schedules that are still queued, and APPROVED Instagram actions whose scheduled time has come (Chrome accounts: execute via action_begin → Chrome → action_complete; graph_api accounts are published by the server automatically). Call at the start of every session, after office_state.",
     input: {},
     mutating: false,
     run: async (ctx) => {

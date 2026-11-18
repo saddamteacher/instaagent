@@ -53,7 +53,15 @@ export default async function ConnectPage() {
         </div>
         <div className="row">
           <span className="grow">
-            <b>ElevenLabs MCP</b> (ixtiyoriy) — Reels uchun ovoz yaratish. Claude Desktop'ga alohida ulanadi (5-bosqich).
+            <b>ElevenLabs MCP</b> (ixtiyoriy) — Reels uchun ovoz (voiceover) yaratish. Claude Desktop → Settings → Connectors'dan ElevenLabs
+            konnektorini o'z ElevenLabs hisobingiz bilan ulang. Ssenarist matn yozgach, Claude ovozni ElevenLabs'da yaratadi va havolasini
+            kontentga biriktiradi — tasdiq oynasida tinglab ko'rasiz. ElevenLabs krediti sizning hisobingizdan sarflanadi.
+          </span>
+        </div>
+        <div className="row">
+          <span className="grow">
+            <b>Ovozli buyruq</b> (ixtiyoriy, Pro) — Ofis sahifasidagi 🎙 tugmasi ElevenLabs ovozli agentiga ulanadi: aytgan buyrug'ingiz
+            Jarvisgram qutisiga yoziladi, Jarvis uni Claude'da bajaradi. Sozlash: <code>docs/elevenlabs-agent.md</code>.
           </span>
         </div>
         <div className="alert warn" style={{ marginTop: 12, marginBottom: 0 }}>

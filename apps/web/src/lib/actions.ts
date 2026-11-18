@@ -3,7 +3,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { DomainError, accounts, agents, approvals, content, getDb, graph, logs, oauth, schedules, users } from "@jarvisgram/db";
+import { DomainError, accounts, agents, approvals, billing, commands, content, getDb, graph, logs, oauth, schedules, users } from "@jarvisgram/db";
 import { AGENT_ROLES, PUBLISH_MODES, TASK_KINDS, parseLocalDateTime, type AgentRole, type PublishMode, type TaskKind } from "@jarvisgram/shared";
 import { TZ, t } from "./i18n";
 import { SESSION_COOKIE, currentSession, requireSession, safeNext, setSessionCookie } from "./session";
@@ -212,4 +212,31 @@ export async function graphSyncAction(f: FormData) {
   if (!cfg) return;
   await graph.graphSyncAnalytics(ctx, new graph.GraphClient(cfg), str(f, "accountId"));
   revalidatePath("/analytics");
+}
+
+// ---------- Buyruqlar va to'lov ----------
+
+export async function dismissCommandAction(f: FormData) {
+  const { ctx } = await requireSession();
+  await commands.dismissCommand(ctx, str(f, "commandId"));
+  revalidatePath("/office");
+}
+
+/** Tarifni sotib olish: buyurtma yaratib, Payme yoki Click sahifasiga yo'naltiradi. */
+export async function checkoutAction(f: FormData) {
+  const { ctx } = await requireSession();
+  const plan = str(f, "plan");
+  const provider = str(f, "provider") === "click" ? "click" : "payme";
+  if (plan !== "pro" && plan !== "agency") return;
+  const web = (process.env.WEB_PUBLIC_URL ?? "http://localhost:3000").replace(/\/+$/, "");
+  const p = await billing.createPayment(ctx, { plan, provider, months: Number(str(f, "months")) || 1 });
+  const back = `${web}/pricing?order=${p.id}`;
+  if (provider === "payme") {
+    const cfg = billing.paymeConfigFromEnv();
+    if (!cfg) redirect("/pricing?err=payme");
+    redirect(billing.paymeCheckoutUrl(cfg, p, back));
+  }
+  const cfg = billing.clickConfigFromEnv();
+  if (!cfg) redirect("/pricing?err=click");
+  redirect(billing.clickCheckoutUrl(cfg, p, back));
 }

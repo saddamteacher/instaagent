@@ -72,6 +72,12 @@ export function ApprovalCard({ a }: { a: ApprovalView }) {
             <textarea id={`text-${a.id}`} rows={5} value={text} onChange={(e) => setText(e.target.value)} maxLength={2200} />
           </div>
           {p.hashtags.length > 0 && <div className="ig-tags">{p.hashtags.join(" ")}</div>}
+          {p.audioUrl && (
+            <div className="field" style={{ margin: "6px 0" }}>
+              <span className="muted">Ovoz (voiceover)</span>
+              <audio controls preload="none" src={p.audioUrl} style={{ width: "100%" }} />
+            </div>
+          )}
           {a.scheduledLabel && <div className="muted">Rejalashtirilgan: {a.scheduledLabel}</div>}
         </div>
       )}

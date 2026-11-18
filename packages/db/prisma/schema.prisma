@@ -111,6 +111,9 @@ model Workspace {
   analytics AnalyticsSnapshot[]
   logs      LogEntry[]
   schedules Schedule[]
+  commands  Command[]
+  payments  Payment[]
+  subscription Subscription?
 
   @@index([ownerId])
 }
@@ -301,6 +304,8 @@ model ContentItem {
   caption     String
   hashtags    String[]
   mediaUrl    String?
+  /// Ovoz (voiceover) fayli — ElevenLabs MCP orqali yaratilgan bo'lishi mumkin
+  audioUrl    String?
   scheduledAt DateTime?
   status      ContentStatus    @default(draft)
   permalink   String?
@@ -372,4 +377,93 @@ model Schedule {
   tasks Task[]
 
   @@index([enabled, nextRunAt])
+}
+
+enum CommandSource {
+  web
+  voice
+}
+
+enum CommandStatus {
+  new
+  taken
+  done
+  dismissed
+}
+
+/// Buyruqlar qutisi: veb-ofisda (matn yoki ElevenLabs ovozli agent orqali) berilgan buyruqlar.
+/// Jarvis (Claude) ularni due_list / commands_inbox orqali olib, majlis chaqiradi.
+model Command {
+  id          String        @id @default(cuid())
+  workspaceId String
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  text        String
+  source      CommandSource @default(web)
+  status      CommandStatus @default(new)
+  accountId   String?
+  meetingId   String?
+  createdAt   DateTime      @default(now())
+  takenAt     DateTime?
+
+  @@index([workspaceId, status])
+}
+
+// ---------- Tariflar va to'lov ----------
+
+enum PlanId {
+  free
+  pro
+  agency
+}
+
+/// Workspace tarifi. currentPeriodEnd o'tsa — avtomatik "free".
+model Subscription {
+  workspaceId      String    @id
+  workspace        Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  plan             PlanId    @default(free)
+  currentPeriodEnd DateTime?
+  updatedAt        DateTime  @updatedAt
+}
+
+enum PaymentProvider {
+  payme
+  click
+}
+
+enum PaymentStatus {
+  created
+  pending
+  paid
+  cancelled
+  failed
+}
+
+/// Bitta buyurtma (order). id — Payme `account.order_id` va Click `merchant_trans_id`.
+model Payment {
+  id            String          @id @default(cuid())
+  /// Raqamli tartib raqami: Click merchant_prepare_id / merchant_confirm_id
+  seq           Int             @unique @default(autoincrement())
+  workspaceId   String
+  workspace     Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  plan          PlanId
+  months        Int             @default(1)
+  /// tiyin (1 so'm = 100 tiyin)
+  amount        Int
+  provider      PaymentProvider
+  status        PaymentStatus   @default(created)
+  /// Payme transaction id yoki Click click_trans_id
+  providerTxnId String?
+  // Payme holati (ms timestamplar)
+  paymeTime        BigInt?
+  paymeCreateTime  BigInt?
+  paymePerformTime BigInt?
+  paymeCancelTime  BigInt?
+  paymeState       Int?
+  paymeReason      Int?
+  createdAt     DateTime        @default(now())
+  paidAt        DateTime?
+  updatedAt     DateTime        @updatedAt
+
+  @@unique([provider, providerTxnId])
+  @@index([workspaceId, createdAt])
 }

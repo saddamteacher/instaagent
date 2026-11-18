@@ -12,9 +12,12 @@ export async function resetDb(db: Db) {
 }
 
 let n = 0;
-export async function makeUser(db: Db, name = "Test") {
+/** Test foydalanuvchisi. Standart: "agency" tarifi (limitlar testlarga xalaqit bermasin); limit testlari uchun plan="free". */
+export async function makeUser(db: Db, name = "Test", plan: "free" | "pro" | "agency" = "agency") {
   n++;
   const { user, workspace } = await signUp(db, { email: `u${Date.now()}_${n}@test.uz`, password: "parol12345", name });
+  if (plan !== "free")
+    await db.subscription.create({ data: { workspaceId: workspace.id, plan, currentPeriodEnd: new Date(Date.now() + 30 * 86400_000) } });
   const ctx: Ctx = { db, workspaceId: workspace.id, actor: "jarvis" };
   return { user, workspace, ctx };
 }

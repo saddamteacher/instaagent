@@ -11,6 +11,8 @@ export interface PublishPayload {
   hashtags: string[];
   /** Ommaviy https havolalar (Graph API uchun shart; Chrome'da foydalanuvchi faylni o'zi tanlashi mumkin). */
   mediaUrls: string[];
+  /** Ovoz fayli (Reels uchun voiceover). Montajda videoga qo'shiladi; Instagram'ga alohida yuklanmaydi. */
+  audioUrl?: string | null;
   scheduledAt: string | null;
   contentItemId: string | null;
 }

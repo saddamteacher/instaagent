@@ -14,7 +14,9 @@ export type DomainErrorCode =
   | "not_yet"
   | "unsupported"
   /** Tashqi xizmat (Graph API) xatosi */
-  | "upstream";
+  | "upstream"
+  /** Tarif limiti — /pricing */
+  | "plan_limit";
 
 /** Domen xatosi: message foydalanuvchiga/Claude'ga ko'rsatiladi (o'zbekcha). */
 export class DomainError extends Error {

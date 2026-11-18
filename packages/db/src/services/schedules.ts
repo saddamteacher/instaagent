@@ -14,6 +14,7 @@ import { DomainError, notFound } from "../errors";
 import { notify } from "../events";
 import { getAccount } from "./accounts";
 import { recomputeAgents } from "./agents";
+import { assertCanAddSchedule } from "./billing";
 import type { Ctx } from "./context";
 import { graphExecute, type GraphClient } from "./graph";
 import { addLog } from "./logs";
@@ -63,6 +64,7 @@ export function describeCadence(s: { weekdays: number[]; timeOfDay: string }) {
 export async function createSchedule(ctx: Ctx, input: ScheduleInput) {
   const { weekdays, tz, kind } = validate(input);
   if (input.accountId) await getAccount(ctx, input.accountId);
+  await assertCanAddSchedule(ctx);
   const s = await ctx.db.schedule.create({
     data: {
       workspaceId: ctx.workspaceId,
@@ -226,7 +228,8 @@ export async function runDuePublishes(db: Db, client: GraphClient | null, now = 
 
 /** Claude uchun: vaqti kelgan, Jarvis bajarishi kerak bo'lgan ishlar. */
 export async function dueList(ctx: Ctx, now = new Date()) {
-  const [fromSchedules, approved] = await Promise.all([
+  const [inboxCommands, fromSchedules, approved] = await Promise.all([
+    ctx.db.command.findMany({ where: { workspaceId: ctx.workspaceId, status: "new" }, orderBy: { createdAt: "asc" } }),
     ctx.db.task.findMany({
       where: { workspaceId: ctx.workspaceId, scheduleId: { not: null }, status: { in: ["queued", "in_progress"] } },
       orderBy: { createdAt: "asc" },
@@ -243,6 +246,8 @@ export async function dueList(ctx: Ctx, now = new Date()) {
     return !at || at <= now;
   });
   return {
+    /** Foydalanuvchi veb-ofisda (matn/ovoz) bergan buyruqlar: meeting_start(command, commandId) bilan boshlang */
+    commands: inboxCommands.map((c) => ({ id: c.id, text: c.text, source: c.source, createdAt: c.createdAt })),
     scheduledTasks: fromSchedules.map((t) => ({
       id: t.id,
       title: t.title,

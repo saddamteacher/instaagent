@@ -4,6 +4,7 @@ import { DomainError } from "../errors";
 import { notify } from "../events";
 import { beginAction, completeAction } from "./actions";
 import { getAccount } from "./accounts";
+import { assertFeature } from "./billing";
 import { saveSnapshot } from "./analytics";
 import type { Ctx } from "./context";
 
@@ -186,6 +187,7 @@ export class GraphClient {
 /** OAuth callback: tokenni olib, akkauntga bog'laydi. Username mos kelishi shart. */
 export async function connectGraphAccount(ctx: Ctx, client: GraphClient, accountId: string, code: string) {
   const acc = await getAccount(ctx, accountId);
+  await assertFeature(ctx, "graphApi");
   const tok = await client.exchangeCode(code);
   const me = await client.me(tok.accessToken);
   if (me.username.toLowerCase() !== acc.username)
@@ -236,6 +238,7 @@ async function tokenFor(ctx: Ctx, client: GraphClient, accountId: string) {
 
 /** Tasdiqlangan vazifani server orqali bajaradi (xuddi shu pauza/limit/tasdiq qoidalari bilan). */
 export async function graphExecute(ctx: Ctx, client: GraphClient, taskId: string) {
+  await assertFeature(ctx, "graphApi");
   const begun = await beginAction(ctx, { taskId, via: "graph_api" });
   try {
     const { token, igUserId } = await tokenFor(ctx, client, begun.account.id);

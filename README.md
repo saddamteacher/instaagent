@@ -112,7 +112,7 @@ Gap bulutchalarining haqiqiylari MCP hodisalaridan keladi: `task_create` → "Me
 | `action_begin`, `action_complete` | Tasdiqlangan harakatni bajarish (pauza, limit, akkaunt tekshiruvi, aniq matn) |
 | `graph_publish`, `graph_sync_analytics` | Rasmiy Instagram API orqali nashr / izoh javobi va statistika |
 | `schedule_create`, `schedule_list`, `schedule_update` | Takroriy vazifalar (jadval) |
-| `due_list` | Vaqti kelgan ishlar: jadval vazifalari va vaqti kelgan tasdiqlangan harakatlar |
+| `due_list` | Vaqti kelgan ishlar: veb-ofis/ovozli buyruqlar, jadval vazifalari va vaqti kelgan tasdiqlangan harakatlar |
 
 Prompt: `jarvis_buyruq` — Claude Desktop'da "+" menyusidan buyruqni to'g'ri ish tartibi bilan boshlaydi.
 
@@ -172,6 +172,35 @@ havolasi; Instagram 24 soatda 50 tadan ortiq nashrga ruxsat bermaydi. DM javobla
 - Asboblar: `schedule_create`, `schedule_list`, `schedule_update`, `due_list`. `SCHEDULER_DISABLED=1` rejalashtiruvchini o'chiradi.
   Render'da MCP servisi doimiy ishlaydigan rejada bo'lishi kerak (bepul rejada uxlab qoladi va jadvallar kechikadi).
 
+## Ovoz va buyruqlar qutisi (5-bosqich)
+
+- **ElevenLabs MCP** foydalanuvchining Claude ilovasiga alohida ulanadi (o'z ElevenLabs hisobi va krediti bilan). Ssenarist/Montajer
+  rollari voiceover'ni shu orqali yaratadi, havola `content_save(audioUrl)` ga yoziladi va tasdiq oynasida tinglanadi.
+- **Veb-ofisdagi ovozli agent** (ixtiyoriy, Pro+): 🎙 tugmasi ElevenLabs Agents sessiyasini ochadi (`@elevenlabs/client`). Agent
+  buyruqni aniqlashtirib, `jarvis_buyruq` client tool'i bilan **buyruqlar qutisi**ga yozadi. Matn bilan yozish ham mumkin.
+  Jarvis buyruqni `due_list.commands` orqali oladi va `meeting_start(command, commandId)` bilan majlis chaqiradi. Agent sozlash:
+  [`docs/elevenlabs-agent.md`](docs/elevenlabs-agent.md). Yopiq agent uchun server signed URL oladi — API kaliti brauzerga chiqmaydi.
+
+## Tariflar va to'lov (5-bosqich)
+
+| Tarif | Narx (VAQTINCHA) | Akkaunt | Takroriy vazifa | Graph API | Ovozli buyruq |
+|---|---|---|---|---|---|
+| Boshlang'ich | bepul | 1 | 2 | — | — |
+| Pro | 149 000 so'm/oy | 3 | 20 | ✓ | ✓ |
+| Agentlik | 449 000 so'm/oy | 15 | 100 | ✓ | ✓ |
+
+Narx va limitlar: `packages/shared/src/plans.ts`. Limitlar serverda (MCP va veb) majburlanadi (`plan_limit`).
+
+- **Payme** (Merchant API, JSON-RPC): `POST /api/pay/payme`. `CheckPerformTransaction`, `CreateTransaction`, `PerformTransaction`,
+  `CancelTransaction` (bajarilgandan keyin bekor qilinsa — obuna muddati qaytariladi), `CheckTransaction`, `GetStatement`;
+  12 soatlik timeout (holat -1, sabab 4); takroriy so'rovlarga bir xil javob; Basic auth (`PAYME_LOGIN:PAYME_KEY`).
+  Checkout: `checkout.paycom.uz/base64(m=…;ac.order_id=…;a=<tiyin>;c=…;l=uz)`.
+- **Click** (SHOP API): `POST /api/pay/click/prepare` va `/complete`, imzo
+  `md5(click_trans_id + service_id + SECRET_KEY + merchant_trans_id + [merchant_prepare_id] + amount + action + sign_time)`,
+  xato kodlari 0, -1…-9. To'lov sahifasi: `my.click.uz/services/pay`.
+- Bir xil tarifni qayta to'lash muddatni uzaytiradi; yuqoriroq tarifga o'tish hozirdan boshlanadi (qolgan kunlar hisoblanmaydi);
+  faol yuqori tarif paytida pastrog'ini sotib olib bo'lmaydi.
+
 ## Xavfsizlik qoidalari (kodda majburlanadi)
 
 | Qoida | Qayerda |
@@ -191,4 +220,4 @@ havolasi; Instagram 24 soatda 50 tadan ortiq nashrga ruxsat bermaydi. DM javobla
 2. ✅ Ofis simulyatsiyasi (canvas, yo'lak grafi + Dijkstra, gap bulutchalari) `office_state` bilan jonli.
 3. ✅ Chrome oqimi: akkaunt almashtirish, post qoralama, statistika o'qish, tasdiqlash; Graph API orqali nashr.
 4. ✅ Kalendar, analitika, rejalashtirilgan vazifalar.
-5. Ovoz (ElevenLabs), tariflar va to'lov (Payme/Click).
+5. ✅ Ovoz (ElevenLabs), tariflar va to'lov (Payme/Click).

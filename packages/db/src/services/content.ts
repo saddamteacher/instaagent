@@ -13,6 +13,8 @@ export interface SaveContentInput {
   caption: string;
   hashtags?: string[];
   mediaUrl?: string;
+  /** Ovoz (voiceover) fayli — masalan ElevenLabs MCP natijasi */
+  audioUrl?: string;
   scheduledAt?: Date | null;
 }
 
@@ -25,6 +27,8 @@ export async function saveContent(ctx: Ctx, input: SaveContentInput) {
   if (!accountId) throw new DomainError("invalid_input", "Kontent uchun akkaunt kerak");
   await getAccount(ctx, accountId);
   if (input.caption.length > 2200) throw new DomainError("invalid_input", "Caption 2200 belgidan oshmasin");
+  for (const u of [input.mediaUrl, input.audioUrl])
+    if (u && !/^https:\/\//.test(u)) throw new DomainError("invalid_input", `Havola https bo'lishi kerak: ${u}`);
   const hashtags = [...new Set((input.hashtags ?? []).filter((t) => t.trim()).map(normTag))];
   if (hashtags.length > 30) throw new DomainError("invalid_input", "Instagram 30 tadan ortiq xeshtegga ruxsat bermaydi");
 
@@ -35,6 +39,7 @@ export async function saveContent(ctx: Ctx, input: SaveContentInput) {
     caption: input.caption,
     hashtags,
     mediaUrl: input.mediaUrl ?? null,
+    audioUrl: input.audioUrl ?? null,
     scheduledAt: input.scheduledAt ?? null,
   };
 

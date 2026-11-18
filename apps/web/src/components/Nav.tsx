@@ -12,8 +12,9 @@ const LINKS = [
   { href: "/analytics", label: t.nav.analytics },
   { href: "/accounts", label: t.nav.accounts },
   { href: "/connect", label: t.nav.connect },
+  { href: "/pricing", label: t.nav.pricing },
 ];
-const SOON = [t.nav.pricing];
+const SOON: string[] = [];
 
 export function Nav({ pending }: { pending: number }) {
   const path = usePathname();

@@ -51,12 +51,13 @@ export const ROLE_GUIDES: Record<AgentRole, RoleGuide> = {
     goal: "Reels va videolar uchun montaj rejasi: kadrlar ketma-ketligi, matn ustqo'ymalari, musiqa va ritm.",
     inputs: ["Ssenariy", "Mavjud video/rasm materiallari ro'yxati", "Davomiylik (sekund)"],
     outputFormat:
-      'JSON: { "durationSec": number, "shots": [{ "t": "0-3s", "visual": string, "textOverlay": string, "audio": string }], "musicMood": string, "coverFrame": string }',
+      'JSON: { "durationSec": number, "shots": [{ "t": "0-3s", "visual": string, "textOverlay": string, "audio": string }], "musicMood": string, "coverFrame": string, "voiceoverUrl"?: string }',
     qualityCriteria: [
       "Birinchi 3 sekundda kuchli hook",
       "Matn ustqo'ymalari 1 ekranda ≤7 so'z",
       "Umumiy davomiylik 7–60 sekund oralig'ida",
       "Mualliflik huquqi bilan himoyalangan musiqa ishlatilmaydi yoki Instagram kutubxonasidan olinadi",
+      "Ovoz kerak bo'lsa: ElevenLabs MCP (Claude Desktop'ga alohida ulangan) orqali ssenariy matnidan voiceover yarating, havolasini content_save(audioUrl) ga yozing; ovoz tanlovini foydalanuvchi bilan kelishing",
     ],
     allowedKinds: ["content"],
   },
@@ -146,6 +147,7 @@ export const ROLE_GUIDES: Record<AgentRole, RoleGuide> = {
       "Hook birinchi 2 sekundda",
       "Har bir bo'lak bitta fikr",
       "Ovoz bilan o'qilganda belgilangan vaqtga sig'adi",
+      "Voiceover uchun matn alohida, tinish belgilari bilan (ElevenLabs uchun tabiiy o'qiladigan) yoziladi",
     ],
     allowedKinds: ["content"],
   },

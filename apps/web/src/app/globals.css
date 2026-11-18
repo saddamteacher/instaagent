@@ -186,3 +186,13 @@ ol.steps li { margin-bottom: 8px; }
 .chart-table td, .chart-table th, table.simple td { padding: 5px 4px; border-bottom: 1px solid var(--border); text-align: left; }
 .chart-table th { color: var(--muted); font-weight: 500; }
 td.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* ---------- Buyruq paneli va tariflar ---------- */
+.cmdbar { margin-bottom: 14px; }
+.plans { grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); }
+.plan { display: flex; flex-direction: column; gap: 6px; }
+.plan.featured { border-color: var(--accent); }
+.plan ul { margin: 6px 0 10px; padding-left: 18px; color: var(--muted); }
+.plan li { margin-bottom: 4px; }
+.plan .pay { display: flex; gap: 8px; flex-wrap: wrap; margin-top: auto; }
+.plan .pay select { height: 40px; }

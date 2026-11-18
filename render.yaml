@@ -15,6 +15,22 @@ envVarGroups:
         sync: false
       - key: IG_GRAPH_VERSION
         value: v26.0
+      - key: ELEVENLABS_AGENT_ID
+        sync: false
+      - key: ELEVENLABS_API_KEY
+        sync: false
+      - key: PAYME_MERCHANT_ID
+        sync: false
+      - key: PAYME_KEY
+        sync: false
+      - key: PAYME_CHECKOUT_URL
+        value: https://checkout.paycom.uz
+      - key: CLICK_SERVICE_ID
+        sync: false
+      - key: CLICK_MERCHANT_ID
+        sync: false
+      - key: CLICK_SECRET_KEY
+        sync: false
 
 databases:
   - name: jarvisgram-db

@@ -1,6 +1,7 @@
 import { DEFAULT_DAILY_LIMITS, type AccountStatus, type DailyLimits, type PublishMode } from "@jarvisgram/shared";
 import { DomainError, notFound } from "../errors";
 import { notify } from "../events";
+import { assertCanAddAccount } from "./billing";
 import type { Ctx } from "./context";
 
 const USERNAME_RE = /^[a-z0-9._]{1,30}$/;
@@ -54,6 +55,7 @@ export async function addAccount(
   input: { username: string; chromeProfile?: string; publishMode?: PublishMode; dailyLimits?: Partial<DailyLimits> },
 ) {
   const username = normalizeUsername(input.username);
+  await assertCanAddAccount(ctx);
   const exists = await ctx.db.instagramAccount.findFirst({ where: { workspaceId: ctx.workspaceId, username } });
   if (exists) throw new DomainError("conflict", `@${username} allaqachon qo'shilgan`);
   const limits = readLimits(input.dailyLimits);

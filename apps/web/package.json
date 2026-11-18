@@ -11,6 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@elevenlabs/client": "1.37.0",
     "@jarvisgram/db": "workspace:*",
     "@jarvisgram/shared": "workspace:*",
     "next": "16.4.6",
