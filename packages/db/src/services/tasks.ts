@@ -26,6 +26,8 @@ export interface CreateTaskInput {
   meetingId?: string;
   contentItemId?: string;
   scheduledAt?: Date;
+  /** Takroriy jadvaldan yaratilganda */
+  scheduleId?: string;
 }
 
 const ACCOUNT_REQUIRED: TaskKind[] = ["publish", "comment_reply", "dm"];
@@ -69,6 +71,7 @@ export async function createTask(ctx: Ctx, input: CreateTaskInput) {
       accountId: accountId ?? null,
       meetingId: input.meetingId ?? null,
       contentItemId: input.contentItemId ?? null,
+      scheduleId: input.scheduleId ?? null,
       scheduledAt: input.scheduledAt ?? null,
       agentId: agent?.id ?? null,
     },

@@ -3,9 +3,9 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { DomainError, accounts, agents, approvals, getDb, graph, logs, oauth, users } from "@jarvisgram/db";
-import { PUBLISH_MODES, type PublishMode } from "@jarvisgram/shared";
-import { t } from "./i18n";
+import { DomainError, accounts, agents, approvals, content, getDb, graph, logs, oauth, schedules, users } from "@jarvisgram/db";
+import { AGENT_ROLES, PUBLISH_MODES, TASK_KINDS, parseLocalDateTime, type AgentRole, type PublishMode, type TaskKind } from "@jarvisgram/shared";
+import { TZ, t } from "./i18n";
 import { SESSION_COOKIE, currentSession, requireSession, safeNext, setSessionCookie } from "./session";
 
 export type FormState = { error?: string; ok?: string } | undefined;
@@ -152,4 +152,64 @@ export async function toggleAgentPauseAction(f: FormData) {
   const { ctx } = await requireSession();
   await agents.setAgentPaused(ctx, str(f, "agentId"), str(f, "paused") === "true");
   revalidatePath("/office");
+}
+
+// ---------- Kalendar va jadvallar ----------
+
+export async function rescheduleContentAction(_: FormState, f: FormData): Promise<FormState> {
+  const { ctx } = await requireSession();
+  const raw = str(f, "when");
+  const when = raw ? parseLocalDateTime(raw, TZ) : null;
+  if (raw && !when) return { error: "Sana noto'g'ri" };
+  try {
+    const item = await content.rescheduleContent(ctx, str(f, "contentId"), when);
+    await logs.addLog(ctx, { message: when ? `Kontent vaqti o'zgartirildi (${raw.replace("T", " ")})` : "Kontent vaqti olib tashlandi", tool: "web", data: { contentItemId: item.id } });
+  } catch (e) {
+    return fail(e);
+  }
+  revalidatePath("/calendar");
+  return { ok: "Saqlandi" };
+}
+
+export async function createScheduleAction(_: FormState, f: FormData): Promise<FormState> {
+  const { ctx } = await requireSession();
+  const role = str(f, "role");
+  const kind = str(f, "kind");
+  if (!(AGENT_ROLES as readonly string[]).includes(role)) return { error: "Rolni tanlang" };
+  try {
+    const s = await schedules.createSchedule(ctx, {
+      title: str(f, "title"),
+      role: role as AgentRole,
+      kind: (TASK_KINDS as readonly string[]).includes(kind) ? (kind as TaskKind) : undefined,
+      accountId: str(f, "accountId") || undefined,
+      weekdays: f.getAll("weekdays").map(Number),
+      timeOfDay: str(f, "timeOfDay"),
+      timezone: TZ,
+    });
+    await logs.addLog(ctx, { message: `Jadval yaratildi: "${s.title}" (${schedules.describeCadence(s)})`, tool: "web" });
+  } catch (e) {
+    return fail(e);
+  }
+  revalidatePath("/calendar");
+  return { ok: "Jadval yaratildi" };
+}
+
+export async function toggleScheduleAction(f: FormData) {
+  const { ctx } = await requireSession();
+  await schedules.updateSchedule(ctx, str(f, "scheduleId"), { enabled: str(f, "enabled") === "true" });
+  revalidatePath("/calendar");
+}
+
+export async function deleteScheduleAction(f: FormData) {
+  const { ctx } = await requireSession();
+  await schedules.deleteSchedule(ctx, str(f, "scheduleId"));
+  revalidatePath("/calendar");
+}
+
+export async function graphSyncAction(f: FormData) {
+  const { ctx } = await requireSession();
+  const cfg = graph.graphConfigFromEnv();
+  if (!cfg) return;
+  await graph.graphSyncAnalytics(ctx, new graph.GraphClient(cfg), str(f, "accountId"));
+  revalidatePath("/analytics");
 }

@@ -47,3 +47,19 @@ export async function getAnalytics(ctx: Ctx, f: { accountId: string; days?: numb
     }
   return { snapshots, latest: last ?? null, delta };
 }
+
+/** Analitika ekrani uchun: davrdagi suratlar, o'zgarish va bajarilgan nashrlar soni. */
+export async function analyticsOverview(ctx: Ctx, f: { accountId: string; days: number }) {
+  const base = await getAnalytics(ctx, f);
+  const since = new Date(Date.now() - f.days * 86400_000);
+  const [published, replies, byRole] = await Promise.all([
+    ctx.db.task.count({ where: { accountId: f.accountId, kind: "publish", status: "done", completedAt: { gte: since } } }),
+    ctx.db.task.count({ where: { accountId: f.accountId, kind: { in: ["comment_reply", "dm"] }, status: "done", completedAt: { gte: since } } }),
+    ctx.db.task.groupBy({
+      by: ["role"],
+      where: { workspaceId: ctx.workspaceId, accountId: f.accountId, status: "done", completedAt: { gte: since } },
+      _count: { _all: true },
+    }),
+  ]);
+  return { ...base, published, replies, doneByRole: byRole.map((r) => ({ role: r.role, count: r._count._all })) };
+}

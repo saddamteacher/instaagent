@@ -110,6 +110,7 @@ model Workspace {
   content   ContentItem[]
   analytics AnalyticsSnapshot[]
   logs      LogEntry[]
+  schedules Schedule[]
 
   @@index([ownerId])
 }
@@ -153,6 +154,7 @@ model InstagramAccount {
   meetings  Meeting[]
   content   ContentItem[]
   analytics AnalyticsSnapshot[]
+  schedules Schedule[]
 
   @@unique([workspaceId, username])
 }
@@ -226,6 +228,9 @@ model Task {
   agentId          String?
   agent            Agent?     @relation(fields: [agentId], references: [id], onDelete: SetNull)
   contentItemId    String?
+  /// Takroriy jadvaldan yaratilgan bo'lsa
+  scheduleId       String?
+  schedule         Schedule?  @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
   title            String
   description      String?
   role             AgentRole
@@ -339,4 +344,32 @@ model LogEntry {
   createdAt   DateTime  @default(now())
 
   @@index([workspaceId, createdAt])
+}
+
+/// Takroriy vazifa: vaqti kelganda server ofisda vazifa yaratadi (Instagram'da hech narsa qilmaydi).
+/// Tashqi harakatli turlar (publish/comment_reply/dm) baribir tasdiqdan o'tadi.
+model Schedule {
+  id          String            @id @default(cuid())
+  workspaceId String
+  workspace   Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  accountId   String?
+  account     InstagramAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  title       String
+  description String?
+  role        AgentRole
+  kind        TaskKind          @default(content)
+  /// 1 = Dushanba … 7 = Yakshanba; bo'sh — har kuni
+  weekdays    Int[]
+  /// "HH:MM" mintaqada
+  timeOfDay   String
+  timezone    String            @default("Asia/Tashkent")
+  enabled     Boolean           @default(true)
+  nextRunAt   DateTime?
+  lastRunAt   DateTime?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  tasks Task[]
+
+  @@index([enabled, nextRunAt])
 }

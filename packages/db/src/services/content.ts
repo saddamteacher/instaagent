@@ -68,3 +68,24 @@ export function contentCalendar(ctx: Ctx, f: { from: Date; to: Date; accountId?:
     include: { account: { select: { username: true } } },
   });
 }
+
+/**
+ * Kalendardan vaqtni o'zgartirish (foydalanuvchi). Bog'langan nashr vazifasi payload'idagi vaqt ham yangilanadi —
+ * matn o'zgarmaydi, shuning uchun qayta tasdiq shart emas. Bajarilayotgan/bajarilgan nashrni ko'chirib bo'lmaydi.
+ */
+export async function rescheduleContent(ctx: Ctx, id: string, scheduledAt: Date | null) {
+  const item = await ctx.db.contentItem.findFirst({ where: { id, workspaceId: ctx.workspaceId } });
+  if (!item) throw notFound("Kontent");
+  if (item.status === "published") throw new DomainError("invalid_transition", "Nashr qilingan kontentni ko'chirib bo'lmaydi");
+  const tasks = await ctx.db.task.findMany({ where: { contentItemId: item.id, kind: "publish", status: { in: ["awaiting_approval", "approved"] } } });
+  if (tasks.some((t) => t.actionStartedAt && Date.now() - t.actionStartedAt.getTime() < 15 * 60_000))
+    throw new DomainError("conflict", "Bu nashr hozir bajarilmoqda");
+  const updated = await ctx.db.contentItem.update({ where: { id: item.id }, data: { scheduledAt } });
+  for (const t of tasks) {
+    const p = t.payload as Record<string, unknown> | null;
+    if (p && p.kind === "publish")
+      await ctx.db.task.update({ where: { id: t.id }, data: { payload: { ...p, scheduledAt: scheduledAt?.toISOString() ?? null } } });
+  }
+  await notify(ctx.db, { workspaceId: ctx.workspaceId, type: "content", refId: item.id });
+  return updated;
+}

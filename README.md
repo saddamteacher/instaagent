@@ -111,10 +111,12 @@ Gap bulutchalarining haqiqiylari MCP hodisalaridan keladi: `task_create` → "Me
 | `chrome_playbook` | Claude in Chrome uchun qadam-baqadam yo'riqnoma |
 | `action_begin`, `action_complete` | Tasdiqlangan harakatni bajarish (pauza, limit, akkaunt tekshiruvi, aniq matn) |
 | `graph_publish`, `graph_sync_analytics` | Rasmiy Instagram API orqali nashr / izoh javobi va statistika |
+| `schedule_create`, `schedule_list`, `schedule_update` | Takroriy vazifalar (jadval) |
+| `due_list` | Vaqti kelgan ishlar: jadval vazifalari va vaqti kelgan tasdiqlangan harakatlar |
 
 Prompt: `jarvis_buyruq` — Claude Desktop'da "+" menyusidan buyruqni to'g'ri ish tartibi bilan boshlaydi.
 
-Spetsifikatsiyadan tashqari qo'shilgan asboblar: `account_status` (Chrome'da ko'rilgan holat; `connected` uchun `observedUsername` shart), `chrome_playbook`, `action_begin`, `action_complete`, `graph_publish`, `graph_sync_analytics`.
+Spetsifikatsiyadan tashqari qo'shilgan asboblar: `account_status` (Chrome'da ko'rilgan holat; `connected` uchun `observedUsername` shart), `chrome_playbook`, `action_begin`, `action_complete`, `graph_publish`, `graph_sync_analytics`, `schedule_*`, `due_list`.
 
 ### Vazifa holatlari
 
@@ -154,6 +156,22 @@ AES-256-GCM bilan shifrlanib saqlanadi (`TOKEN_ENCRYPTION_KEY`), muddati 7 kunda
 akkaunt username'i ro'yxatdagisiga mos kelishi shart. Talablar: professional (biznes/creator) akkaunt, ommaviy `https` media
 havolasi; Instagram 24 soatda 50 tadan ortiq nashrga ruxsat bermaydi. DM javoblari Graph orqali emas (faqat Chrome).
 
+## Kalendar, analitika, rejalashtirish (4-bosqich)
+
+- **Kalendar** (`/calendar`): oylik to'r (Toshkent vaqti), oy nashrlari va qoralamalar; vaqtni o'zgartirish — bog'langan
+  tasdiqlangan nashr payload'idagi vaqt ham yangilanadi (matn o'zgarmaydi, qayta tasdiq shart emas). Bajarilayotgan yoki
+  nashr qilingan kontentni ko'chirib bo'lmaydi.
+- **Analitika** (`/analytics`): akkaunt va davr (7/30/90 kun) filtrlari, KPI (obunachi, qamrov, ER, nashr/javoblar) va har biri
+  uchun alohida chiziqli grafik (kursor + tooltip, klaviatura, jadval ko'rinishi). Faqat haqiqatan o'qilgan raqamlar.
+- **Takroriy vazifalar** (`Schedule`): "har dushanba 09:00 haftalik hisobot". Rejalashtiruvchi (MCP jarayonida, har daqiqa)
+  vaqti kelganda ofisda vazifa yaratadi — Instagram'da o'zi hech narsa qilmaydi. Bir nechta nusxada ham har payt bir marta
+  ishlaydi; server o'chiq bo'lgan vaqtdagi o'tib ketgan paytlar to'planmaydi.
+- **Rejalashtirilgan nashr:** Graph API akkauntida foydalanuvchi aniq post va vaqtni tasdiqlagan bo'lsa, vaqti kelganda server
+  `graph_publish` qoidalari bilan (pauza, limit) o'zi joylaydi. Chrome akkauntlari uchun `due_list` Claude'ga "vaqti keldi"
+  ro'yxatini beradi — bajarish baribir `action_begin` orqali.
+- Asboblar: `schedule_create`, `schedule_list`, `schedule_update`, `due_list`. `SCHEDULER_DISABLED=1` rejalashtiruvchini o'chiradi.
+  Render'da MCP servisi doimiy ishlaydigan rejada bo'lishi kerak (bepul rejada uxlab qoladi va jadvallar kechikadi).
+
 ## Xavfsizlik qoidalari (kodda majburlanadi)
 
 | Qoida | Qayerda |
@@ -172,5 +190,5 @@ havolasi; Instagram 24 soatda 50 tadan ortiq nashrga ruxsat bermaydi. DM javobla
 1. ✅ Monorepo, DB sxemasi, auth, MCP yadrosi (akkauntlar, vazifalar, rollar), OAuth konnektor.
 2. ✅ Ofis simulyatsiyasi (canvas, yo'lak grafi + Dijkstra, gap bulutchalari) `office_state` bilan jonli.
 3. ✅ Chrome oqimi: akkaunt almashtirish, post qoralama, statistika o'qish, tasdiqlash; Graph API orqali nashr.
-4. Kalendar, analitika, rejalashtirilgan vazifalar.
+4. ✅ Kalendar, analitika, rejalashtirilgan vazifalar.
 5. Ovoz (ElevenLabs), tariflar va to'lov (Payme/Click).

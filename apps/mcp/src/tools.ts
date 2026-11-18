@@ -19,6 +19,7 @@ import {
   actions,
   agents,
   graph,
+  schedules,
   analytics,
   approvals,
   content,
@@ -477,6 +478,83 @@ export const buildTools = (deps: ToolDeps) => [
       if (!client) throw new DomainError("unsupported", "Graph API sozlanmagan.");
       const s = await graph.graphSyncAnalytics(ctx, client, a.accountId);
       return { data: { snapshot: s }, log: { message: "Analitik: Graph API statistikasi yangilandi", actor: "analyst" } };
+    },
+  }),
+
+  // ---------- Rejalashtirish ----------
+  def({
+    name: "schedule_create",
+    title: "Takroriy vazifa yaratish",
+    description:
+      "Create a recurring task, e.g. 'every Monday 09:00 weekly report' (analyst/analysis) or 'every day 19:00 draft replies to new comments' (commenter/comment_reply). At that time the server creates a queued task in the office for the role — it never acts on Instagram by itself; publish / comment_reply / dm tasks still need the user's approval. weekdays: 1=Mon … 7=Sun (empty = every day); timeOfDay HH:MM in the user's timezone (default Asia/Tashkent). Only create schedules the user asked for.",
+    input: {
+      title: z.string().min(1).max(200),
+      role,
+      kind: z.enum(TASK_KINDS).optional(),
+      description: z.string().max(2000).optional(),
+      accountId: z.string().optional(),
+      weekdays: z.array(z.number().int().min(1).max(7)).max(7).optional(),
+      timeOfDay: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).describe("HH:MM, masalan 09:00"),
+      timezone: z.string().optional().describe("IANA, standart Asia/Tashkent"),
+    },
+    mutating: true,
+    run: async (ctx, a) => {
+      const s = await schedules.createSchedule(ctx, a);
+      return {
+        data: { schedule: s, cadence: schedules.describeCadence(s) },
+        log: { message: `Jadval yaratildi: "${s.title}" (${schedules.describeCadence(s)})`, actor: s.role },
+      };
+    },
+  }),
+  def({
+    name: "schedule_list",
+    title: "Takroriy vazifalar",
+    description: "List recurring schedules with cadence, next run time and whether they are enabled.",
+    input: {},
+    mutating: false,
+    run: async (ctx) => {
+      const list = await schedules.listSchedules(ctx);
+      return {
+        data: list.map((s) => ({ ...s, cadence: schedules.describeCadence(s) })),
+        log: { message: `Jadvallar ko'rildi (${list.length} ta)` },
+      };
+    },
+  }),
+  def({
+    name: "schedule_update",
+    title: "Takroriy vazifani o'zgartirish",
+    description: "Enable/disable, rename, change days or time of a schedule, or delete it (delete=true). Only when the user asks.",
+    input: {
+      scheduleId: z.string(),
+      enabled: z.boolean().optional(),
+      title: z.string().min(1).max(200).optional(),
+      weekdays: z.array(z.number().int().min(1).max(7)).max(7).optional(),
+      timeOfDay: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
+      delete: z.boolean().optional(),
+    },
+    mutating: true,
+    run: async (ctx, a) => {
+      if (a.delete) {
+        await schedules.deleteSchedule(ctx, a.scheduleId);
+        return { data: { deleted: true }, log: { message: "Jadval o'chirildi" } };
+      }
+      const s = await schedules.updateSchedule(ctx, a.scheduleId, a);
+      return {
+        data: { schedule: s, cadence: schedules.describeCadence(s) },
+        log: { message: `Jadval yangilandi: "${s.title}" (${s.enabled ? schedules.describeCadence(s) : "o'chirilgan"})` },
+      };
+    },
+  }),
+  def({
+    name: "due_list",
+    title: "Vaqti kelgan ishlar",
+    description:
+      "What needs Jarvis now: tasks created by schedules that are still queued, and APPROVED Instagram actions whose scheduled time has come (Chrome accounts: execute via action_begin → Chrome → action_complete; graph_api accounts are published by the server automatically). Call at the start of every session, after office_state.",
+    input: {},
+    mutating: false,
+    run: async (ctx) => {
+      const d = await schedules.dueList(ctx);
+      return { data: d, log: { message: `Vaqti kelgan ishlar: ${d.scheduledTasks.length} vazifa, ${d.readyActions.length} harakat` } };
     },
   }),
 

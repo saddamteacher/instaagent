@@ -8,10 +8,12 @@ const LINKS = [
   { href: "/dashboard", label: t.nav.dashboard },
   { href: "/office", label: t.nav.office },
   { href: "/tasks", label: t.nav.tasks },
+  { href: "/calendar", label: t.nav.calendar },
+  { href: "/analytics", label: t.nav.analytics },
   { href: "/accounts", label: t.nav.accounts },
   { href: "/connect", label: t.nav.connect },
 ];
-const SOON = [t.nav.calendar, t.nav.analytics, t.nav.pricing];
+const SOON = [t.nav.pricing];
 
 export function Nav({ pending }: { pending: number }) {
   const path = usePathname();
