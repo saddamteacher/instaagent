@@ -4,7 +4,7 @@ import type { Db } from "./client";
 
 /** Ofis hodisasini Postgres NOTIFY orqali tarqatadi (MCP → veb SSE). */
 export async function notify(db: Db, ev: Omit<OfficeEvent, "at">): Promise<void> {
-  const payload = JSON.stringify({ ...ev, message: ev.message?.slice(0, 300), at: new Date().toISOString() });
+  const payload = JSON.stringify({ ...ev, message: ev.message?.slice(0, 300), bubble: ev.bubble?.slice(0, 80), at: new Date().toISOString() });
   await db.$executeRaw`SELECT pg_notify(${EVENTS_CHANNEL}, ${payload})`;
 }
 

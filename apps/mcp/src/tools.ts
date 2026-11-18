@@ -29,7 +29,7 @@ import {
 /** Tool natijasi + ofis jurnaliga yoziladigan qisqa yozuv. */
 interface Outcome {
   data: unknown;
-  log?: { message: string; actor?: string; agentId?: string | null; data?: Record<string, unknown> };
+  log?: { message: string; actor?: string; agentId?: string | null; data?: Record<string, unknown>; bubble?: string };
 }
 
 interface ToolDef<S extends z.ZodRawShape> {
@@ -139,7 +139,7 @@ export const TOOLS = [
       const m = await meetings.startMeeting(ctx, a);
       return {
         data: { meeting: m, roles: ROLE_LIST.map((g) => ({ role: g.role, title: g.title, count: g.count, kinds: g.allowedKinds })) },
-        log: { message: `Jarvis majlis chaqirdi: "${m.command}"`, data: { meetingId: m.id } },
+        log: { message: `Jarvis majlis chaqirdi: "${m.command}"`, data: { meetingId: m.id }, bubble: "Hamma majlis zaliga!" },
       };
     },
   }),
@@ -152,7 +152,7 @@ export const TOOLS = [
     run: async (ctx, a) => {
       const m = await meetings.endMeeting(ctx, a);
       const n = await ctx.db.task.count({ where: { meetingId: m.id } });
-      return { data: { meeting: m, tasksCreated: n }, log: { message: `Majlis tugadi: ${n} ta vazifa taqsimlandi` } };
+      return { data: { meeting: m, tasksCreated: n }, log: { message: `Majlis tugadi: ${n} ta vazifa taqsimlandi`, bubble: "Ishga!" } };
     },
   }),
 
@@ -194,6 +194,7 @@ export const TOOLS = [
           actor: a.role,
           agentId: agent?.id,
           data: { taskId: task.id },
+          bubble: "Men olaman!",
         },
       };
     },
@@ -211,6 +212,7 @@ export const TOOLS = [
     },
     mutating: true,
     run: async (ctx, a) => {
+      const before = await tasks.getTask(ctx, a.taskId);
       const t = await tasks.updateTask(ctx, a.taskId, { status: a.status, progress: a.progress, result: a.result as Prisma.InputJsonValue });
       const who = t.agentId ? await ctx.db.agent.findUnique({ where: { id: t.agentId } }) : null;
       const msg =
@@ -226,7 +228,20 @@ export const TOOLS = [
             ? { note: "Foydalanuvchi Jarvisgram veb-ilovasidagi 'Tasdiq kutmoqda' bo'limida ko'rib chiqadi." }
             : {}),
         },
-        log: { message: `${who?.name ?? roleTitle(t.role)}: ${msg}`, actor: t.role, agentId: t.agentId, data: { taskId: t.id, status: t.status } },
+        log: {
+          message: `${who?.name ?? roleTitle(t.role)}: ${msg}`,
+          actor: t.role,
+          agentId: t.agentId,
+          data: { taskId: t.id, status: t.status },
+          bubble:
+            t.status === "done"
+              ? "Tayyor!"
+              : t.status === "awaiting_approval"
+                ? "Tasdiqqa yubordim"
+                : before.status !== "in_progress"
+                  ? "Ishni boshladim"
+                  : `${t.progress}% tayyor`,
+        },
       };
     },
   }),
@@ -388,7 +403,8 @@ export const TOOLS = [
         log: {
           message: a.message,
           actor: a.role ?? "jarvis",
-          agentId,
+          agentId: agentId ?? (a.role ? (await ctx.db.agent.findFirst({ where: { workspaceId: ctx.workspaceId, role: a.role }, orderBy: { slot: "asc" } }))?.id : null),
+          bubble: a.message.slice(0, 80),
           data: { ...(a.taskId ? { taskId: a.taskId } : {}), ...(a.data ? { extra: a.data } : {}) },
         },
       };
@@ -431,6 +447,7 @@ export function registerTools(server: McpServer, getCtx: () => Ctx) {
             message: out.log?.message ?? `${tool.name} chaqirildi`,
             actor: out.log?.actor,
             agentId: out.log?.agentId ?? null,
+            bubble: out.log?.bubble,
             data: { ok: true, ...(out.log?.data ?? {}) } as Prisma.InputJsonValue,
           });
           return text(out.data);

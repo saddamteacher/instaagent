@@ -9,6 +9,8 @@ export interface LogInput {
   /** Standart: ctx.actor. Agent nomidan yozilsa — rol nomi. */
   actor?: string;
   data?: Prisma.InputJsonValue;
+  /** Ofisdagi gap bulutchasi (agentId yoki actor="jarvis" ustida). */
+  bubble?: string;
 }
 
 export async function addLog(ctx: Ctx, input: LogInput) {
@@ -22,7 +24,15 @@ export async function addLog(ctx: Ctx, input: LogInput) {
       data: input.data ?? undefined,
     },
   });
-  await notify(ctx.db, { workspaceId: ctx.workspaceId, type: "log", refId: entry.id, message: entry.message });
+  await notify(ctx.db, {
+    workspaceId: ctx.workspaceId,
+    type: "log",
+    refId: entry.id,
+    message: entry.message,
+    actor: entry.actor,
+    agentId: entry.agentId ?? undefined,
+    bubble: input.bubble?.slice(0, 80),
+  });
   return entry;
 }
 

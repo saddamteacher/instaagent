@@ -77,6 +77,24 @@ Claude konnektorlari MCP serveriga Anthropic bulutidan murojaat qiladi, shuning 
 bo'lishi kerak (Render, yoki lokal sinov uchun `cloudflared tunnel --url http://localhost:3001` va `MCP_PUBLIC_URL` ni tunnel
 manziliga o'rnating). Rozilik sahifasi sizning brauzeringizda ochiladi, shuning uchun lokal sinovda `WEB_PUBLIC_URL=http://localhost:3000` ham ishlaydi.
 
+## Ofis simulyatsiyasi
+
+`apps/web/src/office/`:
+
+| Fayl | Vazifasi |
+|---|---|
+| `graph.ts` | Ofis rejasi dunyo birliklarida (750×372, rasm nisbatida): yo'lak tugunlari, 20 kompyuter, majlis zali (13 joy), dam olish xonasi (13 joy), Dijkstra (binar uyum). Agentlar faqat qirralar bo'ylab yuradi — devordan o'tmaydi. |
+| `sim.ts` | DOM'siz dvigatel. Kim qayerda ekanini **haqiqiy** `office_state` belgilaydi (`reconcile`), dvigatel faqat yurishni va bulutchalarni boshqaradi. Natija — `SimFrame`. |
+| `renderer.ts` | Render qatlami shartnomasi `OfficeRenderer`. |
+| `render2d.ts` | Hozirgi 2D canvas render: fon rasmi, agentlar (Jarvis kostyum va galstukda), yongan monitorlar, majlis ekrani, progress, komiks bulutchalari (to'qnashuvsiz joylashtirish). |
+| `talk.ts` | O'zbekcha bezak iboralari (bir vaqtda ko'pi bilan 2 ta). |
+
+Gap bulutchalarining haqiqiylari MCP hodisalaridan keladi: `task_create` → "Men olaman!", `task_update` → "Ishni boshladim" / "60% tayyor" / "Tasdiqqa yubordim" / "Tayyor!", `meeting_start` → Jarvis "Hamma majlis zaliga!", `log_add(role=…)` → matnning o'zi. Ular `pg_notify` → SSE orqali darhol chiqadi.
+
+**Fon rasmi:** `apps/web/public/office.jpg` (hozir 3840×1905). Koordinatalar rasm o'lchamiga bog'liq emas, shuning uchun xuddi shu kompozitsiyadagi boshqa rasmni (masalan AI bilan kattalashtirilgan 4K versiyani) faylni almashtirib qo'yish kifoya. Canvas ekran kengligi × devicePixelRatio o'lchamida chiziladi (3840 px gacha).
+
+**3D (keyingi versiya):** `OfficeRenderer` interfeysini three.js bilan bajaradigan `ThreeRenderer` yoziladi; `sim.ts`, `graph.ts` va `OfficeView` o'zgarmaydi.
+
 ## MCP asboblari
 
 | Asbob | Vazifasi |
@@ -117,7 +135,7 @@ queued ──▶ in_progress ──▶ done                      (kontent, tahli
 ## Bosqichlar
 
 1. ✅ Monorepo, DB sxemasi, auth, MCP yadrosi (akkauntlar, vazifalar, rollar), OAuth konnektor.
-2. Ofis simulyatsiyasi (canvas, yo'lak grafi + Dijkstra, gap bulutchalari) `office_state` bilan jonli.
+2. ✅ Ofis simulyatsiyasi (canvas, yo'lak grafi + Dijkstra, gap bulutchalari) `office_state` bilan jonli.
 3. Chrome oqimi: akkaunt almashtirish, post qoralama, statistika o'qish, tasdiqlash; Graph API orqali nashr.
 4. Kalendar, analitika, rejalashtirilgan vazifalar.
 5. Ovoz (ElevenLabs), tariflar va to'lov (Payme/Click).

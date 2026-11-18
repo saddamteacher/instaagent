@@ -16,7 +16,13 @@ export interface OfficeEvent {
   type: OfficeEventType;
   /** Tegishli yozuv id'si (task, meeting, ...) */
   refId?: string;
-  /** Qisqa matn: ofisdagi gap bulutchasi uchun ham ishlatiladi. */
+  /** Qisqa matn (log yozuvi). */
   message?: string;
+  /** Log muallifi: "jarvis" | "user" | "system" | rol kaliti. */
+  actor?: string;
+  /** Gapirayotgan agent (ofisda bulutcha shu agent ustida chiqadi). */
+  agentId?: string;
+  /** Komiks gap bulutchasi matni (o'zbekcha, qisqa). */
+  bubble?: string;
   at: string;
 }
