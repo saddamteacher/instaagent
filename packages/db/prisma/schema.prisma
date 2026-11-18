@@ -1,0 +1,329 @@
+// Jarvisgram ma'lumotlar modeli.
+// Enumlar packages/shared/src/enums.ts bilan sinxron (test tekshiradi).
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "esm"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------- Auth ----------
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  passwordHash String
+  createdAt    DateTime @default(now())
+
+  sessions    Session[]
+  workspaces  Workspace[]
+  oauthTokens OAuthToken[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+// ---------- OAuth 2.1 (MCP konnektori uchun) ----------
+
+model OAuthClient {
+  id               String   @id // client_id
+  clientSecretHash String?
+  /// RFC 7591 client metadata (redirect_uris, client_name, ...)
+  metadata         Json
+  createdAt        DateTime @default(now())
+
+  authorizations OAuthAuthorization[]
+  tokens         OAuthToken[]
+}
+
+enum OAuthAuthorizationStatus {
+  pending
+  approved
+  denied
+  used
+}
+
+/// /authorize so'rovi. Foydalanuvchi veb-ilovada rozilik bergach, kod yaratiladi.
+model OAuthAuthorization {
+  id            String                   @id @default(cuid())
+  clientId      String
+  client        OAuthClient              @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  redirectUri   String
+  codeChallenge String
+  state         String?
+  scopes        String[]
+  resource      String?
+  status        OAuthAuthorizationStatus @default(pending)
+  userId        String?
+  workspaceId   String?
+  codeHash      String?                  @unique
+  expiresAt     DateTime
+  createdAt     DateTime                 @default(now())
+}
+
+model OAuthToken {
+  id               String      @id @default(cuid())
+  accessTokenHash  String      @unique
+  refreshTokenHash String?     @unique
+  clientId         String
+  client           OAuthClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  userId           String
+  user             User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspaceId      String
+  scopes           String[]
+  resource         String?
+  expiresAt        DateTime
+  refreshExpiresAt DateTime?
+  revokedAt        DateTime?
+  createdAt        DateTime    @default(now())
+
+  @@index([userId])
+}
+
+// ---------- Domen ----------
+
+model Workspace {
+  id              String   @id @default(cuid())
+  name            String
+  ownerId         String
+  owner           User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  activeAccountId String?
+  createdAt       DateTime @default(now())
+
+  accounts  InstagramAccount[]
+  agents    Agent[]
+  tasks     Task[]
+  meetings  Meeting[]
+  content   ContentItem[]
+  analytics AnalyticsSnapshot[]
+  logs      LogEntry[]
+
+  @@index([ownerId])
+}
+
+enum AccountStatus {
+  pending
+  connected
+  needs_login
+  limited
+  disconnected
+}
+
+enum PublishMode {
+  chrome
+  graph_api
+}
+
+/// Instagram paroli SAQLANMAYDI. Sessiya foydalanuvchining Chrome profilida qoladi.
+model InstagramAccount {
+  id            String        @id @default(cuid())
+  workspaceId   String
+  workspace     Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  username      String
+  chromeProfile String?
+  status        AccountStatus @default(pending)
+  publishMode   PublishMode   @default(chrome)
+  /// { publish, comment_reply, dm, minPauseSec, maxPauseSec }
+  dailyLimits   Json
+  lastCheckedAt DateTime?
+  createdAt     DateTime      @default(now())
+
+  tasks     Task[]
+  meetings  Meeting[]
+  content   ContentItem[]
+  analytics AnalyticsSnapshot[]
+
+  @@unique([workspaceId, username])
+}
+
+enum AgentRole {
+  copywriter
+  editor
+  smm
+  analyst
+  commenter
+  designer
+  scriptwriter
+  hashtagger
+  trendHunter
+}
+
+enum AgentState {
+  chill
+  meeting
+  toDesk
+  working
+}
+
+model Agent {
+  id            String     @id @default(cuid())
+  workspaceId   String
+  workspace     Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  role          AgentRole
+  slot          Int
+  name          String
+  state         AgentState @default(chill)
+  deskNo        Int
+  currentTaskId String?
+  /// Foydalanuvchi veb-ofisda to'xtatgan bo'lsa — yangi vazifa berilmaydi.
+  paused        Boolean    @default(false)
+  updatedAt     DateTime   @updatedAt
+
+  tasks Task[]
+
+  @@unique([workspaceId, role, slot])
+  @@unique([workspaceId, deskNo])
+}
+
+enum TaskStatus {
+  queued
+  in_progress
+  awaiting_approval
+  approved
+  rejected
+  done
+}
+
+enum TaskKind {
+  content
+  research
+  analysis
+  publish
+  comment_reply
+  dm
+  other
+}
+
+model Task {
+  id               String     @id @default(cuid())
+  workspaceId      String
+  workspace        Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  accountId        String?
+  account          InstagramAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  meetingId        String?
+  meeting          Meeting?   @relation(fields: [meetingId], references: [id], onDelete: SetNull)
+  agentId          String?
+  agent            Agent?     @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  contentItemId    String?
+  title            String
+  description      String?
+  role             AgentRole
+  kind             TaskKind   @default(content)
+  requiresApproval Boolean    @default(false)
+  status           TaskStatus @default(queued)
+  progress         Int        @default(0)
+  result           Json?
+  /// Tasdiqlash kodi: faqat veb-ilovada ko'rinadi. MCP orqali tasdiqlash uchun shart.
+  approvalCode     String?
+  reviewNote       String?
+  scheduledAt      DateTime?
+  startedAt        DateTime?
+  submittedAt      DateTime?
+  approvedAt       DateTime?
+  completedAt      DateTime?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  @@index([workspaceId, status])
+  @@index([accountId, kind, approvedAt])
+}
+
+model Meeting {
+  id          String            @id @default(cuid())
+  workspaceId String
+  workspace   Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  command     String
+  accountId   String?
+  account     InstagramAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  summary     String?
+  startedAt   DateTime          @default(now())
+  endedAt     DateTime?
+
+  tasks Task[]
+
+  @@index([workspaceId, endedAt])
+}
+
+enum ContentType {
+  post
+  reel
+  carousel
+  story
+}
+
+enum ContentStatus {
+  draft
+  awaiting_approval
+  approved
+  published
+  rejected
+}
+
+model ContentItem {
+  id          String           @id @default(cuid())
+  workspaceId String
+  workspace   Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  accountId   String
+  account     InstagramAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  taskId      String?
+  type        ContentType
+  caption     String
+  hashtags    String[]
+  mediaUrl    String?
+  scheduledAt DateTime?
+  status      ContentStatus    @default(draft)
+  permalink   String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@index([workspaceId, scheduledAt])
+}
+
+model AnalyticsSnapshot {
+  id             String           @id @default(cuid())
+  workspaceId    String
+  workspace      Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  accountId      String
+  account        InstagramAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  capturedAt     DateTime         @default(now())
+  followers      Int?
+  following      Int?
+  posts          Int?
+  reach          Int?
+  impressions    Int?
+  profileViews   Int?
+  engagementRate Float?
+  /// "chrome" | "graph_api" | "manual"
+  source         String           @default("chrome")
+  raw            Json?
+
+  @@index([accountId, capturedAt])
+}
+
+model LogEntry {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  /// "jarvis" | "user" | "system" | AgentRole
+  actor       String
+  agentId     String?
+  tool        String?
+  message     String
+  data        Json?
+  createdAt   DateTime  @default(now())
+
+  @@index([workspaceId, createdAt])
+}
