@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>MAZZAA — Juda achchiq chipslar</title>
+  <meta name="description" content="MAZZAA — juda achchiq chipslar. Не для слабаков! Olovda tug'ilgan qarsildoq ta'm." />
+  <meta name="theme-color" content="#070303" />
+  <meta property="og:title" content="MAZZAA — Очень острые чипсы" />
+  <meta property="og:description" content="Не для слабаков! Olovda tug'ilgan qarsildoq ta'm." />
+  <meta property="og:image" content="assets/logo.webp" />
+  <link rel="icon" href="assets/favicon.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;900&family=Manrope:wght@400;500;700;800&display=swap" rel="stylesheet" />
+  <link rel="preload" href="assets/logo.webp" as="image" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body class="is-loading">
+  <!-- LOADER -->
+  <div class="loader" id="loader" aria-hidden="true">
+    <div class="loader__inner">
+      <img class="loader__logo" src="assets/logo.webp" alt="" width="160" height="160" />
+      <div class="loader__bar"><span id="loaderBar"></span></div>
+      <div class="loader__pct"><span id="loaderPct">0</span>%</div>
+      <div class="loader__hint" data-i18n="loader">Tova qizimoqda…</div>
+    </div>
+  </div>
+
+  <!-- global sparks overlay -->
+  <canvas class="sparks" id="sparks" aria-hidden="true"></canvas>
+  <div class="grain" aria-hidden="true"></div>
+  <div class="cursor" id="cursor" aria-hidden="true"></div>
+
+  <!-- NAV -->
+  <header class="nav" id="nav">
+    <a class="nav__brand" href="#top" aria-label="MAZZAA">
+      <img src="assets/logo.webp" alt="" width="40" height="40" />
+      <span>MAZZAA</span>
+    </a>
+    <nav class="nav__links" aria-label="Bo'limlar">
+      <a href="#film" data-i18n="nav.film">Sahna</a>
+      <a href="#heat" data-i18n="nav.heat">Achchiqlik</a>
+      <a href="#taste" data-i18n="nav.taste">Ta'm</a>
+      <a href="#challenge" data-i18n="nav.challenge">Challenge</a>
+    </nav>
+    <div class="nav__right">
+      <div class="lang" role="group" aria-label="Til">
+        <button type="button" data-lang="uz" class="is-active">UZ</button>
+        <button type="button" data-lang="ru">RU</button>
+      </div>
+      <a class="btn btn--sm" href="#buy" data-i18n="nav.buy">Sotib olish</a>
+    </div>
+  </header>
+
+  <main>
+    <!-- HERO -->
+    <section class="hero" id="top">
+      <div class="hero__glow" aria-hidden="true"></div>
+      <div class="hero__content">
+        <p class="badge reveal-up"><span class="badge__dot"></span><span>НЕ ДЛЯ СЛАБАКОВ!</span></p>
+        <h1 class="hero__title" aria-label="MAZZAA">
+          <span class="split" data-split>MAZZAA</span>
+        </h1>
+        <p class="hero__sub reveal-up" data-i18n="hero.sub">Olovda tug'ilgan qarsildoq ta'm. Juda achchiq chipslar — faqat jasurlar uchun.</p>
+        <div class="hero__actions reveal-up">
+          <a class="btn" href="#buy" data-i18n="hero.cta">Achchiqni sinab ko'r</a>
+          <a class="btn btn--ghost" href="#film" data-i18n="hero.watch">Qanday tayyorlanadi ↓</a>
+        </div>
+      </div>
+      <div class="hero__disc" id="heroDisc" aria-hidden="true">
+        <div class="disc__ring"></div>
+        <img src="assets/logo.webp" alt="" width="1254" height="1254" />
+      </div>
+      <div class="scrollcue" aria-hidden="true">
+        <span data-i18n="hero.scroll">Pastga suring</span>
+        <i></i>
+      </div>
+    </section>
+
+    <!-- SCROLL FILM -->
+    <section class="film" id="film" aria-label="Oshpaz chipslarni qovuradi">
+      <div class="film__sticky">
+        <canvas class="film__canvas" id="filmCanvas"></canvas>
+        <div class="film__vignette" aria-hidden="true"></div>
+
+        <div class="film__hud" aria-hidden="true">
+          <span class="hud__rec"><i></i>REC</span>
+          <span class="hud__scene">SCENE <b id="hudScene">01</b>/05</span>
+          <span class="hud__tc" id="hudTc">00:00:00</span>
+        </div>
+
+        <div class="chapters">
+          <article class="chapter" data-from="0.00" data-to="0.18">
+            <span class="chapter__no">01</span>
+            <h2 data-i18n="c1.t">Olov yoqildi</h2>
+            <p data-i18n="c1.p">Oshpaz tovani qizdiradi. Hamma narsa shu yerdan boshlanadi.</p>
+          </article>
+          <article class="chapter" data-from="0.20" data-to="0.42">
+            <span class="chapter__no">02</span>
+            <h2 data-i18n="c2.t">Kartoshka tovada</h2>
+            <p data-i18n="c2.p">Tanlangan kartoshka, yupqa va to'lqinsimon to'g'ralgan. Shiiiish…</p>
+          </article>
+          <article class="chapter chapter--center chapter--fire" data-from="0.46" data-to="0.68">
+            <span class="chapter__no">03</span>
+            <h2 class="mega" data-i18n="c3.t">OLOV!</h2>
+            <p data-i18n="c3.p">Bir siltash — va tova alangaga burkanadi.</p>
+          </article>
+          <article class="chapter chapter--right" data-from="0.70" data-to="0.86">
+            <span class="chapter__no">04</span>
+            <h2 data-i18n="c4.t">Chili yomg'iri</h2>
+            <p data-i18n="c4.p">Haqiqiy qizil qalampir. Ayamasdan. Har bir chipsga.</p>
+          </article>
+          <article class="chapter chapter--center chapter--final" data-from="0.89" data-to="1.01">
+            <img class="final__logo" src="assets/logo.webp" alt="MAZZAA" width="1254" height="1254" />
+            <p data-i18n="c5.p">Tayyor. Endi navbat senda.</p>
+          </article>
+        </div>
+
+        <div class="film__progress" aria-hidden="true"><span id="filmBar"></span></div>
+      </div>
+    </section>
+
+    <!-- MARQUEE -->
+    <div class="marquee" aria-hidden="true">
+      <div class="marquee__track">
+        <span>ОЧЕНЬ ОСТРЫЕ</span><b>🌶</b><span>НЕ ДЛЯ СЛАБАКОВ</span><b>🔥</b><span>MAZZAA</span><b>🌶</b>
+        <span>ОЧЕНЬ ОСТРЫЕ</span><b>🌶</b><span>НЕ ДЛЯ СЛАБАКОВ</span><b>🔥</b><span>MAZZAA</span><b>🌶</b>
+      </div>
+    </div>
+
+    <!-- HEAT METER -->
+    <section class="heat" id="heat">
+      <div class="wrap">
+        <p class="eyebrow reveal-up" data-i18n="heat.eye">Achchiqlik shkalasi</p>
+        <h2 class="section-title reveal-up" data-i18n="heat.t">Sen qaysi darajadasan?</h2>
+        <div class="meter" id="meter">
+          <div class="meter__track"><div class="meter__fill" id="meterFill"></div><div class="meter__flame" id="meterFlame"></div></div>
+          <ol class="meter__levels">
+            <li data-lvl="1"><span class="pep"></span><b data-i18n="lvl1">Yengil</b></li>
+            <li data-lvl="2"><span class="pep"></span><b data-i18n="lvl2">O'rtacha</b></li>
+            <li data-lvl="3"><span class="pep"></span><b data-i18n="lvl3">Achchiq</b></li>
+            <li data-lvl="4"><span class="pep"></span><b data-i18n="lvl4">Juda achchiq</b></li>
+            <li data-lvl="5" class="is-max"><span class="pep"></span><b>MAZZAA</b></li>
+          </ol>
+        </div>
+        <div class="heat__num"><span id="heatNum">0</span><small>/100</small></div>
+        <p class="heat__note" data-i18n="heat.note">Ogohlantirish: MAZZAA — shkalaning eng oxirida.</p>
+      </div>
+    </section>
+
+    <!-- TASTE / FEATURES -->
+    <section class="taste" id="taste">
+      <div class="wrap">
+        <p class="eyebrow reveal-up" data-i18n="taste.eye">Nima uchun MAZZAA</p>
+        <h2 class="section-title reveal-up" data-i18n="taste.t">Uch narsa. Hammasi — olov.</h2>
+        <div class="cards">
+          <article class="card" data-tilt>
+            <div class="card__icon">01</div>
+            <h3 data-i18n="f1.t">Qarsildoq</h3>
+            <p data-i18n="f1.p">To'lqinsimon yupqa chips — har tishlashda baland "krak".</p>
+          </article>
+          <article class="card" data-tilt>
+            <div class="card__icon">02</div>
+            <h3 data-i18n="f2.t">Haqiqiy chili</h3>
+            <p data-i18n="f2.p">Qizil qalampir ziravori bilan qalin qoplangan. Kuchsiz ta'm yo'q.</p>
+          </article>
+          <article class="card" data-tilt>
+            <div class="card__icon">03</div>
+            <h3 data-i18n="f3.t">Olov xarakteri</h3>
+            <p data-i18n="f3.p">Achchiqlik asta-sekin ko'tariladi va uzoq saqlanadi.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- CHALLENGE / PRODUCT -->
+    <section class="challenge" id="challenge">
+      <div class="challenge__stage">
+        <div class="orbit" id="orbit" aria-hidden="true">
+          <i class="chip c1"></i><i class="chip c2"></i><i class="chip c3"></i><i class="chip c4"></i>
+          <i class="chip c5"></i><i class="chip c6"></i><i class="pepper p1"></i><i class="pepper p2"></i>
+        </div>
+        <img class="challenge__logo" id="challengeLogo" src="assets/logo.webp" alt="MAZZAA" width="1254" height="1254" loading="lazy" />
+      </div>
+      <div class="challenge__text">
+        <p class="eyebrow" data-i18n="ch.eye">MAZZAA Challenge</p>
+        <h2 class="section-title" data-i18n="ch.t">5 ta chips. Suvsiz. 60 soniya.</h2>
+        <p data-i18n="ch.p">Videoga ol, #mazzaachallenge bilan joyla — eng chidamlilar sahifamizda chiqadi.</p>
+        <div class="timer" id="timer">
+          <div class="timer__val"><span id="timerVal">60</span><small>s</small></div>
+          <button class="btn" type="button" id="timerBtn" data-i18n="ch.btn">Boshlash</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="cta" id="buy">
+      <div class="cta__fire" aria-hidden="true"></div>
+      <div class="wrap cta__inner">
+        <h2 class="cta__title"><span data-i18n="cta.t1">Tayyormisan</span><br /><em data-i18n="cta.t2">olovga?</em></h2>
+        <p data-i18n="cta.p">Do'konlarda va yetkazib berish orqali. Buyurtma uchun yozing.</p>
+        <div class="cta__actions">
+          <a class="btn btn--lg" href="#" data-i18n="cta.tg">Telegram orqali buyurtma</a>
+          <a class="btn btn--ghost btn--lg" href="#" data-i18n="cta.ig">Instagram</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="wrap footer__inner">
+      <div class="footer__brand"><img src="assets/logo.webp" alt="" width="48" height="48" loading="lazy" /><span>MAZZAA</span></div>
+      <p data-i18n="foot">Ehtiyot bo'ling: mahsulot juda achchiq. Bolalar uchun tavsiya etilmaydi.</p>
+      <p class="footer__copy">© <span id="year">2026</span> MAZZAA</p>
+    </div>
+  </footer>
+
+  <script src="assets/vendor/gsap.min.js"></script>
+  <script src="assets/vendor/ScrollTrigger.min.js"></script>
+  <script src="assets/vendor/lenis.min.js"></script>
+  <script src="js/i18n.js"></script>
+  <script src="js/film.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
