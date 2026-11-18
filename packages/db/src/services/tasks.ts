@@ -1,5 +1,8 @@
 import {
+  CONTENT_TYPES,
   ROLE_GUIDES,
+  type ActionPayload,
+  type ContentType,
   requiresApproval as kindRequiresApproval,
   type AgentRole,
   type TaskKind,
@@ -85,7 +88,8 @@ const TRANSITIONS: Record<TaskStatus, TaskStatus[]> = {
   queued: ["in_progress", "awaiting_approval", "done"],
   in_progress: ["in_progress", "awaiting_approval", "done"],
   awaiting_approval: [],
-  approved: ["done"],
+  // Tasdiqlangan harakat faqat action_begin → action_complete orqali bajariladi (pauza va limitlar)
+  approved: [],
   rejected: ["in_progress"],
   done: [],
 };
@@ -94,6 +98,37 @@ export interface UpdateTaskInput {
   status?: TaskStatus;
   progress?: number;
   result?: Prisma.InputJsonValue;
+}
+
+/** Tasdiqqa yuboriladigan aniq harakat: Chrome'da (yoki Graph API orqali) aynan shu bajariladi. */
+async function buildPayload(ctx: Ctx, task: Task, result: unknown, username: string): Promise<ActionPayload> {
+  const r = (result ?? {}) as Record<string, unknown>;
+  if (task.kind === "publish") {
+    const item = task.contentItemId
+      ? await ctx.db.contentItem.findFirst({ where: { id: task.contentItemId, workspaceId: ctx.workspaceId } })
+      : null;
+    const str = (v: unknown) => (typeof v === "string" ? v : "");
+    const list = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
+    const caption = item?.caption ?? str(r.caption);
+    const hashtags = item?.hashtags ?? list(r.hashtags);
+    const mediaUrls = item?.mediaUrl ? [item.mediaUrl] : [...list(r.mediaUrls), ...(str(r.mediaUrl) ? [str(r.mediaUrl)] : [])];
+    const type = (item?.type ?? (CONTENT_TYPES.includes(r.type as ContentType) ? r.type : "post")) as ContentType;
+    const scheduledAt = item?.scheduledAt?.toISOString() ?? (str(r.scheduledAt) || null);
+    if (!caption.trim() && !mediaUrls.length)
+      throw new DomainError("invalid_input", "Nashr uchun caption yoki media kerak (content_save yoki result.caption)");
+    for (const u of mediaUrls)
+      if (!/^https:\/\//.test(u)) throw new DomainError("invalid_input", `Media havolasi https bo'lishi kerak: ${u}`);
+    return { kind: "publish", type, caption, hashtags, mediaUrls, scheduledAt, contentItemId: item?.id ?? null };
+  }
+  assertOwnTarget(task, result, username);
+  return {
+    kind: task.kind as "comment_reply" | "dm",
+    targetType: task.kind === "dm" ? "incoming_dm" : "own_post_comment",
+    targetOwner: username,
+    targetRef: String(r.targetRef ?? ""),
+    originalText: String(r.originalText ?? ""),
+    reply: String(r.reply),
+  };
 }
 
 /** Kommentator natijasi faqat o'z postidagi izoh yoki kelgan DM bo'lishi shart. */
@@ -122,6 +157,13 @@ export async function updateTask(ctx: Ctx, taskId: string, input: UpdateTaskInpu
   if (input.status === "approved" || input.status === "rejected")
     throw new DomainError("forbidden", "Tasdiqlash/rad etish faqat approval_resolve orqali (foydalanuvchi qarori bilan)");
 
+  if (target === "done" && task.requiresApproval)
+    throw new DomainError(
+      "approval_required",
+      task.status === "approved"
+        ? "Tasdiqlangan harakat action_begin → (Chrome) → action_complete orqali yakunlanadi."
+        : "Bu harakat (nashr/izoh javobi/DM) avval 'Tasdiq kutmoqda'ga tushishi va foydalanuvchi tasdiqlashi kerak. status='awaiting_approval' bilan natijani yuboring.",
+    );
   if (input.status && input.status !== task.status && !TRANSITIONS[task.status].includes(input.status))
     throw new DomainError("invalid_transition", `"${task.status}" → "${input.status}" o'tishi mumkin emas`);
   if (input.status === task.status && !TRANSITIONS[task.status].includes(task.status) && input.progress === undefined)
@@ -129,11 +171,6 @@ export async function updateTask(ctx: Ctx, taskId: string, input: UpdateTaskInpu
   if (!input.status && input.progress !== undefined && task.status !== "in_progress" && task.status !== "queued")
     throw new DomainError("invalid_transition", `"${task.status}" holatidagi vazifaning progressi o'zgarmaydi`);
 
-  if (target === "done" && task.requiresApproval && task.status !== "approved")
-    throw new DomainError(
-      "approval_required",
-      "Bu harakat (nashr/izoh javobi/DM) avval 'Tasdiq kutmoqda'ga tushishi va foydalanuvchi tasdiqlashi kerak. status='awaiting_approval' bilan natijani yuboring.",
-    );
 
   const now = new Date();
   const data: Prisma.TaskUpdateInput = {};
@@ -150,10 +187,11 @@ export async function updateTask(ctx: Ctx, taskId: string, input: UpdateTaskInpu
       const result = input.result ?? task.result;
       if (result === null || result === undefined)
         throw new DomainError("invalid_input", "Tasdiqqa yuborishdan oldin 'result' (qoralama) kerak");
-      if (task.role === "commenter" || task.kind === "comment_reply" || task.kind === "dm") {
+      if (task.requiresApproval) {
         const acc = task.accountId ? await getAccount(ctx, task.accountId) : null;
         if (!acc) throw new DomainError("invalid_input", "Vazifaga akkaunt bog'lanmagan");
-        assertOwnTarget(task, result, acc.username);
+        data.payload = (await buildPayload(ctx, task, result, acc.username)) as unknown as Prisma.InputJsonValue;
+        data.actionError = null;
       }
       data.startedAt = task.startedAt ?? now;
       data.submittedAt = now;
@@ -169,17 +207,8 @@ export async function updateTask(ctx: Ctx, taskId: string, input: UpdateTaskInpu
 
   const updated = await ctx.db.task.update({ where: { id: task.id }, data });
 
-  if (updated.contentItemId && input.status && input.status !== task.status) {
-    if (input.status === "awaiting_approval")
-      await ctx.db.contentItem.update({ where: { id: updated.contentItemId }, data: { status: "awaiting_approval" } });
-    if (input.status === "done" && updated.kind === "publish") {
-      const permalink = (updated.result as Record<string, unknown> | null)?.permalink;
-      await ctx.db.contentItem.update({
-        where: { id: updated.contentItemId },
-        data: { status: "published", permalink: typeof permalink === "string" ? permalink : null },
-      });
-    }
-  }
+  if (updated.contentItemId && input.status === "awaiting_approval" && task.status !== "awaiting_approval")
+    await ctx.db.contentItem.update({ where: { id: updated.contentItemId }, data: { status: "awaiting_approval" } });
 
   await notify(ctx.db, {
     workspaceId: ctx.workspaceId,

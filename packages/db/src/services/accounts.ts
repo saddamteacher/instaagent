@@ -21,6 +21,12 @@ export function readLimits(json: unknown): DailyLimits {
   return { ...DEFAULT_DAILY_LIMITS, ...j };
 }
 
+/** Tashqariga (MCP javoblari) chiqarish uchun: maxfiy maydonlarsiz. */
+export function publicAccount<T extends { graphTokenEnc?: string | null }>(a: T) {
+  const { graphTokenEnc, ...rest } = a;
+  return { ...rest, graphConnected: !!graphTokenEnc };
+}
+
 export function listAccounts(ctx: Ctx) {
   return ctx.db.instagramAccount.findMany({ where: { workspaceId: ctx.workspaceId }, orderBy: { createdAt: "asc" } });
 }
@@ -69,6 +75,17 @@ export async function addAccount(
   return acc;
 }
 
+export async function updateLimits(ctx: Ctx, accountId: string, input: Partial<DailyLimits>) {
+  const acc = await getAccount(ctx, accountId);
+  const next = { ...readLimits(acc.dailyLimits), ...input };
+  for (const [k, v] of Object.entries(next))
+    if (!Number.isInteger(v) || v < 0) throw new DomainError("invalid_input", `${k} manfiy bo'lmagan butun son bo'lsin`);
+  if (next.minPauseSec < 10) throw new DomainError("invalid_input", "Pauza kamida 10 soniya bo'lsin");
+  if (next.minPauseSec > next.maxPauseSec) throw new DomainError("invalid_input", "Minimal pauza maksimaldan katta bo'lmasin");
+  if (next.publish > 50) throw new DomainError("invalid_input", "Instagram 24 soatda 50 tadan ortiq nashrga ruxsat bermaydi");
+  return ctx.db.instagramAccount.update({ where: { id: acc.id }, data: { dailyLimits: next } });
+}
+
 export async function switchAccount(ctx: Ctx, ref: { accountId?: string; username?: string }) {
   const acc = await findAccount(ctx, ref);
   await ctx.db.workspace.update({ where: { id: ctx.workspaceId }, data: { activeAccountId: acc.id } });
@@ -76,8 +93,20 @@ export async function switchAccount(ctx: Ctx, ref: { accountId?: string; usernam
   return acc;
 }
 
-export async function setAccountStatus(ctx: Ctx, accountId: string, status: AccountStatus) {
-  await getAccount(ctx, accountId);
+export async function setAccountStatus(ctx: Ctx, accountId: string, status: AccountStatus, observedUsername?: string) {
+  const current = await getAccount(ctx, accountId);
+  if (status === "connected") {
+    if (!observedUsername)
+      throw new DomainError("invalid_input", "connected uchun observedUsername kerak: Chrome'da ko'rgan username'ingiz");
+    let seen = observedUsername;
+    try {
+      seen = normalizeUsername(observedUsername);
+    } catch {
+      /* noto'g'ri format — solishtirishda mos kelmaydi */
+    }
+    if (seen !== current.username)
+      throw new DomainError("forbidden", `Chrome'da @${seen} ochiq, kutilgan @${current.username}. Avval to'g'ri akkauntga o'ting.`);
+  }
   const acc = await ctx.db.instagramAccount.update({
     where: { id: accountId },
     data: { status, lastCheckedAt: new Date() },

@@ -7,13 +7,21 @@ export type DomainErrorCode =
   | "forbidden"
   | "conflict"
   | "invalid_input"
-  | "unauthorized";
+  | "unauthorized"
+  /** Pauza tugamagan — retryAfterSeconds dan keyin */
+  | "too_soon"
+  /** Rejalashtirilgan vaqt hali kelmagan */
+  | "not_yet"
+  | "unsupported"
+  /** Tashqi xizmat (Graph API) xatosi */
+  | "upstream";
 
 /** Domen xatosi: message foydalanuvchiga/Claude'ga ko'rsatiladi (o'zbekcha). */
 export class DomainError extends Error {
   constructor(
     public code: DomainErrorCode,
     message: string,
+    public details?: Record<string, unknown>,
   ) {
     super(message);
     this.name = "DomainError";

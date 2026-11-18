@@ -139,6 +139,14 @@ model InstagramAccount {
   /// { publish, comment_reply, dm, minPauseSec, maxPauseSec }
   dailyLimits   Json
   lastCheckedAt DateTime?
+  /// Oxirgi Instagram harakati va keyingisiga ruxsat vaqti (tasodifiy pauza)
+  lastActionAt    DateTime?
+  nextActionAfter DateTime?
+  /// Rasmiy Graph API (Instagram Login) ulanishi. Token AES-256-GCM bilan shifrlangan.
+  igUserId           String?
+  graphTokenEnc      String?
+  graphTokenExpiresAt DateTime?
+  graphConnectedAt   DateTime?
   createdAt     DateTime      @default(now())
 
   tasks     Task[]
@@ -228,7 +236,12 @@ model Task {
   result           Json?
   /// Tasdiqlash kodi: faqat veb-ilovada ko'rinadi. MCP orqali tasdiqlash uchun shart.
   approvalCode     String?
+  /// Tasdiqqa yuborilgan (foydalanuvchi tahrirlagan bo'lishi mumkin) aniq matn/media — Chrome'da aynan shu bajariladi
+  payload          Json?
   reviewNote       String?
+  /// Bajarish (action_begin / action_complete)
+  actionStartedAt  DateTime?
+  actionError      String?
   scheduledAt      DateTime?
   startedAt        DateTime?
   submittedAt      DateTime?

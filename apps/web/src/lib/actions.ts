@@ -3,7 +3,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { DomainError, accounts, agents, approvals, getDb, logs, oauth, users } from "@jarvisgram/db";
+import { DomainError, accounts, agents, approvals, getDb, graph, logs, oauth, users } from "@jarvisgram/db";
 import { PUBLISH_MODES, type PublishMode } from "@jarvisgram/shared";
 import { t } from "./i18n";
 import { SESSION_COOKIE, currentSession, requireSession, safeNext, setSessionCookie } from "./session";
@@ -99,10 +99,20 @@ export async function resolveApprovalAction(_: FormState, f: FormData): Promise<
   const { ctx } = await requireSession();
   const decision = str(f, "decision") === "approve" ? "approve" : "reject";
   try {
-    const r = await approvals.resolveApproval(ctx, { taskId: str(f, "taskId"), decision, note: str(f, "note") || undefined, byUser: true });
+    const editedText = f.has("editedText") ? str(f, "editedText") : undefined;
+    const r = await approvals.resolveApproval(ctx, {
+      taskId: str(f, "taskId"),
+      decision,
+      note: str(f, "note") || undefined,
+      editedText: decision === "approve" ? editedText : undefined,
+      byUser: true,
+    });
     await agents.recomputeAgents(ctx);
     await logs.addLog(ctx, {
-      message: decision === "approve" ? `Foydalanuvchi tasdiqladi: "${r.task.title}"` : `Rad etildi: "${r.task.title}"`,
+      message:
+        decision === "approve"
+          ? `Foydalanuvchi ${editedText !== undefined ? "tahrirlab " : ""}tasdiqladi: "${r.task.title}"`
+          : `Rad etildi: "${r.task.title}"`,
       tool: "web",
       data: { taskId: r.task.id },
     });
@@ -111,6 +121,31 @@ export async function resolveApprovalAction(_: FormState, f: FormData): Promise<
   }
   revalidatePath("/tasks");
   return { ok: decision === "approve" ? "Tasdiqlandi. Claude'ga bajarishni ayting." : "Rad etildi" };
+}
+
+export async function updateLimitsAction(_: FormState, f: FormData): Promise<FormState> {
+  const { ctx } = await requireSession();
+  const num = (k: string) => Number(str(f, k));
+  try {
+    await accounts.updateLimits(ctx, str(f, "accountId"), {
+      publish: num("publish"),
+      comment_reply: num("comment_reply"),
+      dm: num("dm"),
+      minPauseSec: num("minPauseSec"),
+      maxPauseSec: num("maxPauseSec"),
+    });
+  } catch (e) {
+    return fail(e);
+  }
+  revalidatePath("/accounts");
+  return { ok: "Limitlar saqlandi" };
+}
+
+export async function disconnectGraphAction(f: FormData) {
+  const { ctx } = await requireSession();
+  const acc = await graph.disconnectGraph(ctx, str(f, "accountId"));
+  await logs.addLog(ctx, { message: `@${acc.username}: Graph API uzildi, Chrome rejimiga qaytdi`, tool: "web" });
+  revalidatePath("/accounts");
 }
 
 export async function toggleAgentPauseAction(f: FormData) {

@@ -1,7 +1,7 @@
 export { createDb, getDb, type Db } from "./client";
 export { DomainError, type DomainErrorCode } from "./errors";
 export { notify, listen } from "./events";
-export { randomToken, sha256 } from "./crypto";
+export { randomToken, sha256, encryptSecret, decryptSecret } from "./crypto";
 export type { Ctx } from "./services/context";
 export type * from "./generated/prisma/client";
 
@@ -16,4 +16,6 @@ export * as analytics from "./services/analytics";
 export * as logs from "./services/logs";
 export * as office from "./services/office";
 export * as oauth from "./services/oauth";
+export * as actions from "./services/actions";
+export * as graph from "./services/graph";
 export type { OfficeState } from "./services/office";

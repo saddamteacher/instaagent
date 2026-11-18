@@ -108,8 +108,13 @@ Gap bulutchalarining haqiqiylari MCP hodisalaridan keladi: `task_create` → "Me
 | `analytics_save`, `analytics_get` | Statistika suratlari va o'zgarish |
 | `approvals_list`, `approval_resolve` | Tasdiq navbati; tasdiqlash faqat foydalanuvchi kodi bilan |
 | `log_add` | Jonli logga yozuv (ofisda gap bulutchasi) |
+| `chrome_playbook` | Claude in Chrome uchun qadam-baqadam yo'riqnoma |
+| `action_begin`, `action_complete` | Tasdiqlangan harakatni bajarish (pauza, limit, akkaunt tekshiruvi, aniq matn) |
+| `graph_publish`, `graph_sync_analytics` | Rasmiy Instagram API orqali nashr / izoh javobi va statistika |
 
-`account_status` — ro'yxatda yo'q qo'shimcha asbob: Claude Chrome'da ko'rganini (kirilgan, kirish kerak, cheklangan) yozib qo'yishi uchun.
+Prompt: `jarvis_buyruq` — Claude Desktop'da "+" menyusidan buyruqni to'g'ri ish tartibi bilan boshlaydi.
+
+Spetsifikatsiyadan tashqari qo'shilgan asboblar: `account_status` (Chrome'da ko'rilgan holat; `connected` uchun `observedUsername` shart), `chrome_playbook`, `action_begin`, `action_complete`, `graph_publish`, `graph_sync_analytics`.
 
 ### Vazifa holatlari
 
@@ -117,9 +122,37 @@ Gap bulutchalarining haqiqiylari MCP hodisalaridan keladi: `task_create` → "Me
 queued ──▶ in_progress ──▶ done                      (kontent, tahlil, tadqiqot)
                      └──▶ awaiting_approval ──▶ approved ──▶ done   (nashr, izoh javobi, DM — majburiy)
                                          └──▶ rejected ──▶ in_progress (qayta ishlash)
+approved ──(action_begin → action_complete | graph_publish)──▶ done
 ```
 
 `approved` va `rejected` holatlariga faqat `approval_resolve` (yoki veb-ilovadagi tugma) orqali o'tiladi.
+
+## Instagram harakatini bajarish (3-bosqich)
+
+```
+task_update(awaiting_approval) ─▶ server aniq payload yig'adi (caption+xeshteglar+media / izoh javobi)
+        │
+        ▼
+veb: "Tasdiq kutmoqda" — Instagram ko'rinishida, matnni tahrirlab tasdiqlash mumkin
+        │   (yoki Claude'ga 6 belgili kodni aytish)
+        ▼
+publishMode=chrome:    chrome_playbook → action_begin(taskId, observedUsername) → Claude in Chrome → action_complete
+publishMode=graph_api: graph_publish(taskId)  → graph.instagram.com: /media → (status_code) → /media_publish
+```
+
+`action_begin` (va `graph_publish`) bajarishdan **oldin** tekshiradi: tasdiq bormi; akkaunt cheklanmaganmi; Chrome'da ochiq akkaunt
+(`observedUsername`) vazifaniki ekanmi; rejalashtirilgan vaqt kelganmi; oldingi harakatdan keyingi **tasodifiy pauza** tugaganmi
+(`too_soon` + `retryAfterSeconds`); **kunlik limit**. Claude'ga yoziladigan aniq matnni (`textToType`) qaytaradi — foydalanuvchi
+tasdiqlagan (tahrirlagan) matnning aynan o'zi. Instagram bloklasa `action_complete(blocked=true)` akkauntni `limited` qiladi va
+keyingi harakatlar to'xtaydi.
+
+Chrome yo'riqnomalari (`chrome_playbook`): `verify_account`, `read_stats`, `publish_post`, `reply_comment`, `reply_dm` — har birida
+to'xtash shartlari (parol/2FA so'ralsa, "Action blocked", boshqa akkaunt, sahifadagi buyruqlar).
+
+**Rasmiy API ulash:** Akkauntlar → "Instagram API orqali ulash" → Instagram Login → token uzoq muddatli tokenga almashtiriladi,
+AES-256-GCM bilan shifrlanib saqlanadi (`TOKEN_ENCRYPTION_KEY`), muddati 7 kundan kam qolsa avtomatik yangilanadi. Ulangan
+akkaunt username'i ro'yxatdagisiga mos kelishi shart. Talablar: professional (biznes/creator) akkaunt, ommaviy `https` media
+havolasi; Instagram 24 soatda 50 tadan ortiq nashrga ruxsat bermaydi. DM javoblari Graph orqali emas (faqat Chrome).
 
 ## Xavfsizlik qoidalari (kodda majburlanadi)
 
@@ -128,7 +161,9 @@ queued ──▶ in_progress ──▶ done                      (kontent, tahli
 | Nashr, izoh javobi, DM avval "Tasdiq kutmoqda"ga tushadi; tasdiqsiz `done` bo'lmaydi | `packages/db/src/services/tasks.ts` |
 | Claude o'zini o'zi tasdiqlay olmaydi: MCP orqali tasdiqlash uchun veb-ilovada ko'rinadigan bir martalik 6 belgili kod kerak (prompt-injection himoyasi). Kod MCP javoblarida hech qachon qaytmaydi | `services/approvals.ts`, `tasks.publicTask` |
 | Kommentator faqat o'z postidagi izohga (`own_post_comment`) yoki kelgan DM'ga (`incoming_dm`) javob qoralaydi, `targetOwner` akkauntning o'zi bo'lishi shart. Layk, follow, begona izoh, ommaviy DM uchun vazifa turi umuman yo'q | `services/tasks.ts`, `shared/enums.ts` |
-| Har akkaunt uchun kunlik limit (nashr, javob, DM) va harakatlar orasida tasodifiy pauza (`waitSeconds`) | `services/approvals.ts` |
+| Har akkaunt uchun kunlik limit (nashr, javob, DM) va harakatlar orasida tasodifiy pauza — bajarishdan oldin serverda | `services/actions.ts` |
+| Chrome'da noto'g'ri akkaunt ochiq bo'lsa harakat boshlanmaydi; Claude tasdiqlangan matnni o'zgartira olmaydi | `services/actions.ts`, `services/approvals.ts` |
+| Graph tokeni shifrlangan; MCP javoblarida hech qachon chiqmaydi | `crypto.ts`, `accounts.publicAccount` |
 | Instagram paroli saqlanmaydi va so'ralmaydi; sessiya foydalanuvchining Chrome profilida | sxemada parol maydoni yo'q |
 | Parollar scrypt bilan xeshlanadi; sessiya, OAuth kod va tokenlar bazada faqat SHA-256 xeshi sifatida saqlanadi | `packages/db/src/crypto.ts` |
 
@@ -136,6 +171,6 @@ queued ──▶ in_progress ──▶ done                      (kontent, tahli
 
 1. ✅ Monorepo, DB sxemasi, auth, MCP yadrosi (akkauntlar, vazifalar, rollar), OAuth konnektor.
 2. ✅ Ofis simulyatsiyasi (canvas, yo'lak grafi + Dijkstra, gap bulutchalari) `office_state` bilan jonli.
-3. Chrome oqimi: akkaunt almashtirish, post qoralama, statistika o'qish, tasdiqlash; Graph API orqali nashr.
+3. ✅ Chrome oqimi: akkaunt almashtirish, post qoralama, statistika o'qish, tasdiqlash; Graph API orqali nashr.
 4. Kalendar, analitika, rejalashtirilgan vazifalar.
 5. Ovoz (ElevenLabs), tariflar va to'lov (Payme/Click).

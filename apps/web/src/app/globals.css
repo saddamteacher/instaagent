@@ -125,3 +125,14 @@ ol.steps li { margin-bottom: 8px; }
 @media (max-width: 860px) {
   .agent-panel { position: static; width: 100%; max-height: none; margin-top: 12px; }
 }
+
+/* ---------- Tasdiq: Instagram ko'rinishi ---------- */
+.ig-preview { background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 12px; margin: 8px 0; max-width: 520px; }
+.ig-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.ig-avatar { width: 28px; height: 28px; border-radius: 50%; background: linear-gradient(135deg, #f0a04b, #c2569b); display: inline-block; }
+.ig-media { width: 100%; aspect-ratio: 4 / 5; object-fit: cover; border-radius: 8px; background: #0f1114; display: block; }
+.ig-placeholder { display: grid; place-items: center; color: var(--muted); font-size: 13px; aspect-ratio: 16 / 7; border: 1px dashed var(--border-strong); }
+.ig-tags { color: var(--info); font-size: 13px; margin-bottom: 6px; word-break: break-word; }
+.ig-msg { padding: 8px 12px; border-radius: 14px; margin-top: 6px; max-width: 85%; white-space: pre-wrap; }
+.ig-msg.in { background: #2a2e35; }
+.usage { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 14px; padding: 10px 0 0; font-size: 13px; }

@@ -1,15 +1,15 @@
-import { randomInt } from "node:crypto";
+import { isPublishPayload, type ActionPayload } from "@jarvisgram/shared";
+import type { Prisma } from "../generated/prisma/client";
 import { DomainError } from "../errors";
 import { notify } from "../events";
-import { readLimits } from "./accounts";
-import { startOfUtcDay, type Ctx } from "./context";
+import type { Ctx } from "./context";
 import { getTask } from "./tasks";
 
 export function listApprovals(ctx: Ctx, opts: { accountId?: string } = {}) {
   return ctx.db.task.findMany({
     where: { workspaceId: ctx.workspaceId, status: "awaiting_approval", ...(opts.accountId ? { accountId: opts.accountId } : {}) },
     orderBy: { submittedAt: "asc" },
-    include: { account: { select: { username: true } }, agent: { select: { name: true } } },
+    include: { account: { select: { username: true, publishMode: true } }, agent: { select: { name: true } } },
   });
 }
 
@@ -24,6 +24,8 @@ export interface ResolveInput {
   note?: string;
   /** true — foydalanuvchi veb-ilovada o'zi bosdi (sessiya bilan). */
   byUser: boolean;
+  /** Foydalanuvchi tahrirlagan caption / javob matni (faqat veb-ilova) */
+  editedText?: string;
 }
 
 export async function resolveApproval(ctx: Ctx, input: ResolveInput) {
@@ -38,7 +40,7 @@ export async function resolveApproval(ctx: Ctx, input: ResolveInput) {
     });
     if (t.contentItemId) await ctx.db.contentItem.update({ where: { id: t.contentItemId }, data: { status: "rejected" } });
     await notify(ctx.db, { workspaceId: ctx.workspaceId, type: "task", refId: t.id, message: "Rad etildi" });
-    return { task: t, waitSeconds: 0 };
+    return { task: t };
   }
 
   if (!input.byUser) {
@@ -50,27 +52,26 @@ export async function resolveApproval(ctx: Ctx, input: ResolveInput) {
       );
   }
 
-  let waitSeconds = 0;
-  if (task.accountId && task.requiresApproval) {
-    const acc = await ctx.db.instagramAccount.findUniqueOrThrow({ where: { id: task.accountId } });
-    const limits = readLimits(acc.dailyLimits);
-    const limit = limits[task.kind as "publish" | "comment_reply" | "dm"];
-    const usedToday = await ctx.db.task.count({
-      where: { accountId: acc.id, kind: task.kind, approvedAt: { gte: startOfUtcDay() } },
-    });
-    if (usedToday >= limit)
-      throw new DomainError(
-        "limit_reached",
-        `@${acc.username} uchun bugungi "${task.kind}" limiti tugadi (${usedToday}/${limit}). Ertaga davom eting yoki limitni sozlamalarda o'zgartiring.`,
-      );
-    waitSeconds = randomInt(limits.minPauseSec, limits.maxPauseSec + 1);
+  // Foydalanuvchi veb-ilovada matnni tahrirlagan bo'lsa — tasdiqlangan payload shu matn bilan
+  let payload = task.payload as ActionPayload | null;
+  if (input.editedText !== undefined && payload) {
+    if (!input.byUser) throw new DomainError("forbidden", "Matnni faqat foydalanuvchi veb-ilovada tahrirlay oladi");
+    const text = input.editedText.trim();
+    if (!text) throw new DomainError("invalid_input", "Matn bo'sh bo'lmasin");
+    payload = isPublishPayload(payload) ? { ...payload, caption: text } : { ...payload, reply: text };
   }
 
   const t = await ctx.db.task.update({
     where: { id: task.id },
-    data: { status: "approved", approvedAt: new Date(), reviewNote: input.note ?? null, approvalCode: null },
+    data: {
+      status: "approved",
+      approvedAt: new Date(),
+      reviewNote: input.note ?? null,
+      approvalCode: null,
+      ...(payload ? { payload: payload as unknown as Prisma.InputJsonValue } : {}),
+    },
   });
   if (t.contentItemId) await ctx.db.contentItem.update({ where: { id: t.contentItemId }, data: { status: "approved" } });
   await notify(ctx.db, { workspaceId: ctx.workspaceId, type: "task", refId: t.id, message: "Tasdiqlandi" });
-  return { task: t, waitSeconds };
+  return { task: t };
 }

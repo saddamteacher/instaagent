@@ -241,7 +241,7 @@ describe("MCP asboblari", () => {
       type: "reel",
       caption: "Yangi kolleksiya",
       hashtags: ["moda", "#toshkent"],
-      scheduledAt: "2026-11-19T09:00:00+05:00",
+      scheduledAt: new Date(Date.now() - 3600_000).toISOString(),
       taskId: pub.task.id,
     });
     expect(contentItem.hashtags).toEqual(["#moda", "#toshkent"]);
@@ -257,10 +257,18 @@ describe("MCP asboblari", () => {
     const codeFromWeb = (await db.task.findUniqueOrThrow({ where: { id: pub.task.id } })).approvalCode!;
     const ok = await call(client, "approval_resolve", { taskId: pub.task.id, decision: "approve", approvalCode: codeFromWeb });
     expect(ok.task.status).toBe("approved");
-    expect(ok.waitSeconds).toBeGreaterThanOrEqual(45);
 
-    await call(client, "task_update", { taskId: pub.task.id, status: "done", result: { permalink: "https://www.instagram.com/reel/abc/" } });
-    const cal = await call(client, "content_calendar_get", { from: "2026-11-18T00:00:00Z", to: "2026-11-30T00:00:00Z" });
+    // Bajarish: Chrome'da noto'g'ri akkaunt ochiq bo'lsa rad etiladi; to'g'ri bo'lsa aniq matn qaytadi
+    expect(await callErr(client, "action_begin", { taskId: pub.task.id, observedUsername: "begona" })).toContain("forbidden");
+    await call(client, "account_status", { accountId: account.id, status: "connected", observedUsername: "mening.dokonim" });
+    const begun = await call(client, "action_begin", { taskId: pub.task.id, observedUsername: "mening.dokonim" });
+    expect(begun.textToType).toBe("Yangi kolleksiya\n\n#moda #toshkent");
+    expect(begun.playbookSteps.id).toBe("publish_post");
+    await call(client, "action_complete", { taskId: pub.task.id, ok: true, permalink: "https://www.instagram.com/reel/abc/" });
+    const cal = await call(client, "content_calendar_get", {
+      from: new Date(Date.now() - 2 * 86400_000).toISOString(),
+      to: new Date(Date.now() + 2 * 86400_000).toISOString(),
+    });
     expect(cal.items[0].status).toBe("published");
     expect(cal.items[0].permalink).toBe("https://www.instagram.com/reel/abc/");
 
@@ -275,7 +283,7 @@ describe("MCP asboblari", () => {
 
     // Har bir chaqiruv log yozgan (xatolar ham)
     const logs = await db.logEntry.findMany({ where: { workspaceId } });
-    const toolCalls = 26;
+    const toolCalls = 29;
     expect(logs.filter((x) => x.tool).length).toBe(toolCalls);
     expect(logs.some((x) => x.actor === "system" && x.message.startsWith("Xato"))).toBe(true);
     expect(logs.some((x) => x.actor === "scriptwriter" && x.message.includes("Tayyor!"))).toBe(true);

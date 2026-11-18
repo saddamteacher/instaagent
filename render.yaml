@@ -1,6 +1,21 @@
 # Render Blueprint: Postgres + MCP server + veb-ilova.
 # Deploydan keyin: jarvisgram-web'da MCP_PUBLIC_URL va WEB_PUBLIC_URL, jarvisgram-mcp'da WEB_PUBLIC_URL ni
-# haqiqiy (yoki o'z domeningiz) manzillarga o'rnating.
+# haqiqiy (yoki o'z domeningiz) manzillarga o'rnating. "jarvisgram-secrets" guruhida TOKEN_ENCRYPTION_KEY
+# (openssl rand -base64 32) va Instagram ilovasi ma'lumotlarini kiriting — ikkala servis bir xil qiymatni oladi.
+envVarGroups:
+  - name: jarvisgram-secrets
+    envVars:
+      - key: TOKEN_ENCRYPTION_KEY
+        sync: false
+      - key: INSTAGRAM_APP_ID
+        sync: false
+      - key: INSTAGRAM_APP_SECRET
+        sync: false
+      - key: INSTAGRAM_REDIRECT_URI
+        sync: false
+      - key: IG_GRAPH_VERSION
+        value: v26.0
+
 databases:
   - name: jarvisgram-db
     databaseName: jarvisgram
@@ -22,6 +37,7 @@ services:
         sync: false
       - key: NODE_VERSION
         value: "22"
+      - fromGroup: jarvisgram-secrets
 
   - type: web
     name: jarvisgram-web
@@ -39,3 +55,4 @@ services:
         sync: false
       - key: NODE_VERSION
         value: "22"
+      - fromGroup: jarvisgram-secrets

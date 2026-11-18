@@ -1,6 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { AGENT_ROLES, AGENT_STATES, TASK_STATUSES, TASK_KINDS, TOTAL_AGENTS } from "@jarvisgram/shared";
-import { createDb, DomainError, accounts, agents, approvals, meetings, office, tasks, users, oauth } from "../src/index";
+import { createDb, DomainError, accounts, actions, agents, approvals, graph, meetings, office, tasks, users, oauth } from "../src/index";
 import { AgentRole, AgentState, TaskStatus, TaskKind } from "../src/generated/prisma/enums";
 import { makeUser, resetDb } from "../src/testing";
 
@@ -126,7 +126,7 @@ describe("vazifa holatlari va agentlar", () => {
     expect(await code(tasks.updateTask(ctx, task.id, { status: "awaiting_approval" }))).toBe("invalid_input");
     const sub = await tasks.updateTask(ctx, task.id, { status: "awaiting_approval", result: { caption: "Salom" } });
     expect(sub.approvalCode).toMatch(/^[A-Z2-9]{6}$/);
-    expect(await code(tasks.updateTask(ctx, task.id, { status: "done" }))).toBe("invalid_transition");
+    expect(await code(tasks.updateTask(ctx, task.id, { status: "done" }))).toBe("approval_required");
   });
 });
 
@@ -160,18 +160,20 @@ describe("tasdiqlash", () => {
     });
     expect(r.task.status).toBe("approved");
     expect(r.task.approvalCode).toBeNull();
-    expect(r.waitSeconds).toBeGreaterThanOrEqual(5);
-    expect(r.waitSeconds).toBeLessThanOrEqual(9);
-    const done = await tasks.updateTask(ctx, task.id, { status: "done", result: { permalink: "https://instagram.com/p/x" } });
-    expect(done.status).toBe("done");
+    expect(r.task.payload).toMatchObject({ kind: "publish", caption: "Salom" });
+    // Tasdiqlangan harakat task_update bilan yakunlanmaydi — faqat action_begin/action_complete
+    expect(await code(tasks.updateTask(ctx, task.id, { status: "done" }))).toBe("approval_required");
   });
 
-  it("kunlik limit ishlaydi", async () => {
+  it("foydalanuvchi matnni tahrirlab tasdiqlaydi; Claude tahrirlay olmaydi", async () => {
     const { ctx, task } = await submitted();
-    await approvals.resolveApproval(ctx, { taskId: task.id, decision: "approve", byUser: true });
-    const { task: t2 } = await tasks.createTask(ctx, { title: "2", role: "smm", kind: "publish" });
-    await tasks.updateTask(ctx, t2.id, { status: "awaiting_approval", result: { caption: "2" } });
-    expect(await code(approvals.resolveApproval(ctx, { taskId: t2.id, decision: "approve", byUser: true }))).toBe("limit_reached");
+    expect(
+      await code(
+        approvals.resolveApproval(ctx, { taskId: task.id, decision: "approve", approvalCode: task.approvalCode!, editedText: "x", byUser: false }),
+      ),
+    ).toBe("forbidden");
+    const r = await approvals.resolveApproval(ctx, { taskId: task.id, decision: "approve", editedText: "Yangi matn", byUser: true });
+    expect(r.task.payload).toMatchObject({ caption: "Yangi matn" });
   });
 
   it("rad etish kodsiz mumkin, keyin qayta ishlash", async () => {
@@ -215,5 +217,163 @@ describe("OAuth", () => {
     expect(await oauth.verifyAccessToken(db, tok.access_token)).toBeNull();
     expect(await oauth.verifyAccessToken(db, tok2.access_token)).not.toBeNull();
     expect(await code(oauth.exchangeRefresh(db, { clientId: "c1", refreshToken: tok.refresh_token }))).toBe("unauthorized");
+  });
+});
+
+describe("bajarish: action_begin / action_complete", () => {
+  async function approved(opts: { limits?: Record<string, number>; result?: Record<string, unknown>; kind?: "publish" | "comment_reply" } = {}) {
+    const u = await makeUser(db);
+    const acc = await accounts.addAccount(u.ctx, { username: "shop", dailyLimits: { publish: 2, minPauseSec: 30, maxPauseSec: 60, ...opts.limits } });
+    await db.instagramAccount.update({ where: { id: acc.id }, data: { status: "connected" } });
+    const kind = opts.kind ?? "publish";
+    const { task } = await tasks.createTask(u.ctx, { title: "t", role: kind === "publish" ? "smm" : "commenter", kind });
+    await tasks.updateTask(u.ctx, task.id, {
+      status: "awaiting_approval",
+      result: (opts.result ?? (kind === "publish"
+        ? { caption: "Salom", hashtags: ["#a"] }
+        : { targetType: "own_post_comment", targetOwner: "shop", targetRef: "https://www.instagram.com/p/x/", originalText: "Narxi?", reply: "DM'ga yozing" })) as never,
+    });
+    await approvals.resolveApproval(u.ctx, { taskId: task.id, decision: "approve", byUser: true });
+    return { ...u, acc, taskId: task.id };
+  }
+  const unpause = (id: string) => db.instagramAccount.update({ where: { id }, data: { nextActionAfter: null } });
+
+  it("aniq matnni qaytaradi; noto'g'ri akkaunt, tasdiqsiz vazifa rad etiladi", async () => {
+    const { ctx, taskId } = await approved();
+    expect(await code(actions.beginAction(ctx, { taskId, via: "chrome" }))).toBe("invalid_input");
+    expect(await code(actions.beginAction(ctx, { taskId, via: "chrome", observedUsername: "boshqa" }))).toBe("forbidden");
+    expect(await code(actions.beginAction(ctx, { taskId, via: "graph_api" }))).toBe("forbidden");
+    const b = await actions.beginAction(ctx, { taskId, via: "chrome", observedUsername: "@Shop" });
+    expect(b.textToType).toBe("Salom\n\n#a");
+    expect(b.playbook).toBe("publish_post");
+    expect(b.nextActionInSeconds).toBeGreaterThanOrEqual(30);
+    expect(await code(actions.beginAction(ctx, { taskId, via: "chrome", observedUsername: "shop" }))).toBe("conflict");
+    expect(await code(actions.completeAction(ctx, { taskId, ok: true, permalink: "https://evil.com/x" }))).toBe("invalid_input");
+    const done = await actions.completeAction(ctx, { taskId, ok: true, permalink: "https://www.instagram.com/p/abc/" });
+    expect(done.status).toBe("done");
+    expect((done.result as Record<string, unknown>).permalink).toBe("https://www.instagram.com/p/abc/");
+  });
+
+  it("tasodifiy pauza va kunlik limit serverda majburlanadi", async () => {
+    const { ctx, taskId, acc } = await approved({ limits: { publish: 2 } });
+    await actions.beginAction(ctx, { taskId, via: "chrome", observedUsername: "shop" });
+    await actions.completeAction(ctx, { taskId, ok: true });
+    const mk = async (title: string) => {
+      const { task } = await tasks.createTask(ctx, { title, role: "smm", kind: "publish" });
+      await tasks.updateTask(ctx, task.id, { status: "awaiting_approval", result: { caption: title } });
+      await approvals.resolveApproval(ctx, { taskId: task.id, decision: "approve", byUser: true });
+      return task.id;
+    };
+    const t2 = await mk("2");
+    try {
+      await actions.beginAction(ctx, { taskId: t2, via: "chrome", observedUsername: "shop" });
+      throw new Error("pauza ishlamadi");
+    } catch (e) {
+      expect((e as DomainError).code).toBe("too_soon");
+      expect((e as DomainError).details?.retryAfterSeconds).toBeGreaterThan(0);
+    }
+    await unpause(acc.id);
+    await actions.beginAction(ctx, { taskId: t2, via: "chrome", observedUsername: "shop" });
+    await actions.completeAction(ctx, { taskId: t2, ok: true });
+    const t3 = await mk("3");
+    await unpause(acc.id);
+    expect(await code(actions.beginAction(ctx, { taskId: t3, via: "chrome", observedUsername: "shop" }))).toBe("limit_reached");
+  });
+
+  it("rejalashtirilgan vaqt kelmaguncha bajarilmaydi", async () => {
+    const future = new Date(Date.now() + 3600_000).toISOString();
+    const { ctx, taskId } = await approved({ result: { caption: "x", scheduledAt: future } });
+    expect(await code(actions.beginAction(ctx, { taskId, via: "chrome", observedUsername: "shop" }))).toBe("not_yet");
+  });
+
+  it("Instagram bloklasa akkaunt 'limited' bo'ladi va keyingi harakatlar to'xtaydi", async () => {
+    const { ctx, taskId, acc } = await approved();
+    await actions.beginAction(ctx, { taskId, via: "chrome", observedUsername: "shop" });
+    const t = await actions.completeAction(ctx, { taskId, ok: false, error: "Action blocked", blocked: true });
+    expect(t.status).toBe("approved");
+    expect(t.actionError).toBe("Action blocked");
+    expect((await db.instagramAccount.findUniqueOrThrow({ where: { id: acc.id } })).status).toBe("limited");
+    await unpause(acc.id);
+    expect(await code(actions.beginAction(ctx, { taskId, via: "chrome", observedUsername: "shop" }))).toBe("forbidden");
+  });
+
+  it("account_status=connected faqat Chrome'da to'g'ri akkaunt ko'rilganda", async () => {
+    const { ctx, acc } = await approved();
+    expect(await code(accounts.setAccountStatus(ctx, acc.id, "connected"))).toBe("invalid_input");
+    expect(await code(accounts.setAccountStatus(ctx, acc.id, "connected", "begona"))).toBe("forbidden");
+    expect((await accounts.setAccountStatus(ctx, acc.id, "connected", "@shop")).status).toBe("connected");
+  });
+});
+
+describe("Graph API", () => {
+  process.env.TOKEN_ENCRYPTION_KEY = Buffer.alloc(32, 7).toString("base64");
+
+  /** Soxta Graph API: qaysi so'rovlar kelganini yozib boradi. */
+  function fakeGraph(username = "shop") {
+    const calls: { method: string; url: string; body: string; auth: string | null }[] = [];
+    let n = 0;
+    const f = (async (input: string | URL, init?: RequestInit) => {
+      const url = String(input);
+      const body = init?.body ? String(init.body) : "";
+      const auth = new Headers(init?.headers).get("authorization");
+      calls.push({ method: init?.method ?? "GET", url, body, auth });
+      const ok = (j: unknown) => new Response(JSON.stringify(j), { status: 200, headers: { "content-type": "application/json" } });
+      if (url.endsWith("/oauth/access_token")) return ok({ access_token: "SHORT", user_id: 1789 });
+      if (url.includes("/access_token?grant_type=ig_exchange_token")) return ok({ access_token: "LONG", expires_in: 5184000 });
+      if (url.includes("/me?")) return ok({ user_id: "1789", username, followers_count: 1200, follows_count: 80, media_count: 41 });
+      if (url.endsWith("/1789/media")) return ok({ id: `C${++n}` });
+      if (/\/C\d+\?fields=status_code/.test(url)) return ok({ status_code: "FINISHED" });
+      if (url.endsWith("/1789/media_publish")) return ok({ id: "M1" });
+      if (url.includes("/M1?fields=permalink")) return ok({ permalink: "https://www.instagram.com/p/GRAPH1/" });
+      if (url.endsWith("/555/replies")) return ok({ id: "R1" });
+      return new Response(JSON.stringify({ error: { message: "unknown " + url } }), { status: 400 });
+    }) as typeof fetch;
+    const client = new graph.GraphClient({ appId: "app", appSecret: "sec", redirectUri: "https://web/cb", fetch: f, sleep: async () => {} });
+    return { client, calls };
+  }
+
+  it("ulash: token shifrlanadi, boshqa username bilan ulab bo'lmaydi", async () => {
+    const u = await makeUser(db);
+    const acc = await accounts.addAccount(u.ctx, { username: "shop" });
+    expect(await code(graph.connectGraphAccount(u.ctx, fakeGraph("begona").client, acc.id, "CODE"))).toBe("forbidden");
+    const { client, calls } = fakeGraph();
+    const c = await graph.connectGraphAccount(u.ctx, client, acc.id, "CODE");
+    expect(c.publishMode).toBe("graph_api");
+    expect(c.igUserId).toBe("1789");
+    expect(c.graphTokenEnc).not.toContain("LONG");
+    expect(calls[0]!.body).toContain("code=CODE");
+    expect(client.authorizeUrl("st")).toContain("scope=instagram_business_basic%2Cinstagram_business_content_publish");
+  });
+
+  it("nashr: tasdiqdan keyin konteyner → media_publish → permalink; Bearer token", async () => {
+    const u = await makeUser(db);
+    const acc = await accounts.addAccount(u.ctx, { username: "shop", dailyLimits: { minPauseSec: 30, maxPauseSec: 30 } });
+    const { client, calls } = fakeGraph();
+    await graph.connectGraphAccount(u.ctx, client, acc.id, "CODE");
+    const { task } = await tasks.createTask(u.ctx, { title: "Nashr", role: "smm", kind: "publish" });
+    await tasks.updateTask(u.ctx, task.id, {
+      status: "awaiting_approval",
+      result: { caption: "Yangi kolleksiya", hashtags: ["#moda"], mediaUrl: "https://cdn.example.com/a.jpg" },
+    });
+    expect(await code(graph.graphExecute(u.ctx, client, task.id))).toBe("approval_required");
+    await approvals.resolveApproval(u.ctx, { taskId: task.id, decision: "approve", byUser: true });
+    const done = await graph.graphExecute(u.ctx, client, task.id);
+    expect(done.status).toBe("done");
+    expect((done.result as Record<string, unknown>).permalink).toBe("https://www.instagram.com/p/GRAPH1/");
+    const create = calls.find((c) => c.url.endsWith("/1789/media"))!;
+    expect(create.url).toContain("/v26.0/");
+    expect(create.auth).toBe("Bearer LONG");
+    expect(new URLSearchParams(create.body).get("image_url")).toBe("https://cdn.example.com/a.jpg");
+    expect(new URLSearchParams(create.body).get("caption")).toBe("Yangi kolleksiya\n\n#moda");
+    expect(calls.some((c) => c.url.endsWith("/media_publish") && c.body.includes("creation_id=C1"))).toBe(true);
+  });
+
+  it("statistika Graph API'dan olinadi", async () => {
+    const u = await makeUser(db);
+    const acc = await accounts.addAccount(u.ctx, { username: "shop" });
+    const { client } = fakeGraph();
+    await graph.connectGraphAccount(u.ctx, client, acc.id, "CODE");
+    const s = await graph.graphSyncAnalytics(u.ctx, client, acc.id);
+    expect([s.followers, s.following, s.posts, s.source]).toEqual([1200, 80, 41, "graph_api"]);
   });
 });
