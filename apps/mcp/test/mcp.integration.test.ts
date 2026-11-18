@@ -76,7 +76,7 @@ async function oauthLogin(userId: string) {
     }),
   });
   expect(tokenRes.status).toBe(200);
-  return { ...(await tokenRes.json()), clientId: client.client_id } as {
+  return { ...((await tokenRes.json()) as object), clientId: client.client_id } as {
     access_token: string;
     refresh_token: string;
     clientId: string;
@@ -104,11 +104,11 @@ async function callErr(client: Client, name: string, args: Record<string, unknow
 
 describe("auth", () => {
   it("metadata endpointlari ishlaydi", async () => {
-    const as = await (await fetch(`${base}/.well-known/oauth-authorization-server`)).json();
+    const as: any = await (await fetch(`${base}/.well-known/oauth-authorization-server`)).json();
     expect(as.issuer).toBe(`${base}/`);
     expect(as.code_challenge_methods_supported).toContain("S256");
     expect(as.registration_endpoint).toBe(`${base}/register`);
-    const pr = await (await fetch(`${base}/.well-known/oauth-protected-resource/mcp`)).json();
+    const pr: any = await (await fetch(`${base}/.well-known/oauth-protected-resource/mcp`)).json();
     expect(pr.resource).toBe(`${base}/mcp`);
     expect(pr.authorization_servers).toContain(`${base}/`);
   });

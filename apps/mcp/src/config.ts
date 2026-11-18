@@ -19,7 +19,7 @@ export function configFromEnv(): Config {
   const port = Number(process.env.PORT ?? 3001);
   return makeConfig({
     port,
-    mcpPublicUrl: process.env.MCP_PUBLIC_URL ?? `http://localhost:${port}`,
+    mcpPublicUrl: process.env.MCP_PUBLIC_URL ?? process.env.RENDER_EXTERNAL_URL ?? `http://localhost:${port}`,
     webPublicUrl: process.env.WEB_PUBLIC_URL ?? "http://localhost:3000",
   });
 }

@@ -1,0 +1,41 @@
+# Render Blueprint: Postgres + MCP server + veb-ilova.
+# Deploydan keyin: jarvisgram-web'da MCP_PUBLIC_URL va WEB_PUBLIC_URL, jarvisgram-mcp'da WEB_PUBLIC_URL ni
+# haqiqiy (yoki o'z domeningiz) manzillarga o'rnating.
+databases:
+  - name: jarvisgram-db
+    databaseName: jarvisgram
+    plan: basic-256mb
+
+services:
+  - type: web
+    name: jarvisgram-mcp
+    runtime: node
+    plan: starter
+    buildCommand: corepack enable && pnpm install --frozen-lockfile
+    preDeployCommand: pnpm db:deploy
+    startCommand: pnpm --filter @jarvisgram/mcp start
+    healthCheckPath: /healthz
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase: { name: jarvisgram-db, property: connectionString }
+      - key: WEB_PUBLIC_URL
+        sync: false
+      - key: NODE_VERSION
+        value: "22"
+
+  - type: web
+    name: jarvisgram-web
+    runtime: node
+    plan: starter
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @jarvisgram/web build
+    startCommand: pnpm --filter @jarvisgram/web start
+    healthCheckPath: /login
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase: { name: jarvisgram-db, property: connectionString }
+      - key: WEB_PUBLIC_URL
+        sync: false
+      - key: MCP_PUBLIC_URL
+        sync: false
+      - key: NODE_VERSION
+        value: "22"

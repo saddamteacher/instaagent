@@ -1,0 +1,123 @@
+# Jarvisgram
+
+Instagram akkauntlarini AI-agentlar jamoasi bilan boshqarish platformasi. Foydalanuvchi buyruqni **o'z Claude ilovasida**
+beradi; Claude bu yerda **Jarvis**, ya'ni bosh direktor: buyruqni vazifalarga bo'ladi va 13 agent rolini bajaradi. Veb-ilovada
+virtual ofis bor: kim ishlayotgani, kim dam olayotgani jonli ko'rinadi.
+
+> ## ⚠️ Muhim ogohlantirish
+> **Brauzer avtomatizatsiyasi (Claude in Chrome orqali Instagram'da harakat qilish) Instagram foydalanish shartlariga zid.**
+> Akkaunt vaqtincha cheklanishi, harakatlari bloklanishi yoki butunlay o'chirilishi mumkin. Xavfni kamaytirish uchun
+> Jarvisgram har bir nashr, izoh javobi va DM'ni tasdiqdan o'tkazadi, kunlik limit va tasodifiy pauza qo'yadi. Lekin bu
+> xavfni **yo'q qilmaydi**.
+>
+> Biznes va creator akkauntlar uchun **rasmiy Instagram Graph API** rejimi (`publishMode = graph_api`) qo'llab-quvvatlanadi va
+> tavsiya etiladi. Graph API orqali nashr oqimi 3-bosqichda quriladi.
+
+## Arxitektura
+
+```
+┌──────────────────────────┐   MCP (Streamable HTTP + OAuth 2.1)   ┌────────────────────────┐
+│ Claude Desktop / claude.ai│ ───────────────────────────────────▶ │ apps/mcp (Express)     │
+│  = Jarvis (miya)          │                                      │  18 asbob, OAuth AS     │
+│  + Claude in Chrome ──────┼──▶ Instagram (foydalanuvchi brauzeri) └──────────┬─────────────┘
+│  + ElevenLabs MCP (ovoz)  │                                                 │ Prisma
+└──────────────────────────┘                                                 ▼
+                                    LISTEN/NOTIFY                     ┌──────────────┐
+┌──────────────────────────┐ ◀──────────────────────────────────────  │  Postgres    │
+│ apps/web (Next.js)       │ ─────────────────────────────────────▶  └──────────────┘
+│  ofis, vazifalar, tasdiq │   SSE /api/events → brauzer
+└──────────────────────────┘
+```
+
+- **Miya — foydalanuvchining o'z Claude ilovasi.** Jarvisgram Claude obunasi tokenini hech qachon ishlatmaydi, "Claude bilan kirish"
+  tugmasi yo'q. Claude Jarvisgram'ga oddiy MCP konnektori sifatida OAuth orqali ulanadi.
+- **MCP faqat holat va yo'riqnoma beradi.** U Instagramga o'zi kirmaydi. Instagram harakatlari Claude in Chrome orqali, foydalanuvchining
+  o'z brauzerida va Chrome profilida bajariladi.
+- **Jonli holat:** har bir MCP chaqiruvi `LogEntry` yozadi, agent holatini haqiqiy `Task` va `Meeting` yozuvlaridan qayta hisoblaydi
+  va `pg_notify` yuboradi. Veb-ilova uni SSE orqali brauzerga uzatadi.
+
+| Papka | Vazifasi |
+|---|---|
+| `apps/mcp` | MCP server: asboblar, OAuth 2.1 (metadata, DCR, PKCE S256, refresh rotatsiyasi, revoke), stateless Streamable HTTP |
+| `apps/web` | Next.js 16 App Router: ro'yxatdan o'tish, kirish, MCP ulash, akkauntlar, vazifalar va tasdiqlash, ofis, OAuth rozilik sahifasi, SSE |
+| `packages/db` | Prisma 7 sxemasi, migratsiyalar, domen servislari (holat mashinasi, tasdiqlash, limitlar, NOTIFY) |
+| `packages/shared` | Enumlar, 13 agent rolining yo'riqnomalari, hodisa turlari |
+
+## Ishga tushirish (lokal)
+
+Talablar: Node 22.12+, pnpm 10, Postgres 16.
+
+```bash
+cp .env.example packages/db/.env          # DATABASE_URL
+cp .env.example apps/web/.env.local       # DATABASE_URL, WEB_PUBLIC_URL, MCP_PUBLIC_URL
+pnpm install
+pnpm db:deploy                            # migratsiyalarni qo'llash (dev'da: pnpm db:migrate)
+```
+
+```bash
+pnpm dev:mcp      # http://localhost:3001/mcp
+pnpm dev:web      # http://localhost:3000
+```
+
+Testlar (test bazasi `TEST_DATABASE_URL`, nomida `test` bo'lishi shart, chunki testlar uni tozalaydi):
+
+```bash
+pnpm test         # db servislari + MCP integratsion testlari + veb
+pnpm typecheck
+```
+
+## Claude Desktop'ga ulash
+
+1. Veb-ilovada ro'yxatdan o'ting → **Claude'ga ulash** sahifasidan konnektor manzilini nusxalang (`MCP_PUBLIC_URL/mcp`).
+2. Claude Desktop → **Settings → Connectors → Add custom connector** → URL'ni joylang → **Connect**.
+3. Brauzerda Jarvisgram rozilik oynasi ochiladi → **Ruxsat berish**.
+4. Claude'da yozing: *"Jarvis, ofis holatini ko'rsat"*.
+
+Claude konnektorlari MCP serveriga Anthropic bulutidan murojaat qiladi, shuning uchun MCP serverining **ommaviy HTTPS** manzili
+bo'lishi kerak (Render, yoki lokal sinov uchun `cloudflared tunnel --url http://localhost:3001` va `MCP_PUBLIC_URL` ni tunnel
+manziliga o'rnating). Rozilik sahifasi sizning brauzeringizda ochiladi, shuning uchun lokal sinovda `WEB_PUBLIC_URL=http://localhost:3000` ham ishlaydi.
+
+## MCP asboblari
+
+| Asbob | Vazifasi |
+|---|---|
+| `office_state` | Ofis holati: agentlar, majlis, vazifalar, tasdiq navbati, oxirgi log |
+| `accounts_list`, `account_add`, `account_switch`, `account_status` | Instagram akkauntlari (parolsiz), Chrome'da o'tish yo'riqnomasi, holat |
+| `meeting_start`, `meeting_end` | Buyruq bo'yicha majlis: hamma majlis zaliga yig'iladi, keyin tarqaladi |
+| `agent_roles_get` | Har rol uchun maqsad, kirish, chiqish formati, sifat mezonlari, cheklovlar |
+| `task_create`, `task_update`, `task_list` | Vazifalar va holat mashinasi |
+| `content_save`, `content_calendar_get` | Kontent qoralamalari va kalendar |
+| `analytics_save`, `analytics_get` | Statistika suratlari va o'zgarish |
+| `approvals_list`, `approval_resolve` | Tasdiq navbati; tasdiqlash faqat foydalanuvchi kodi bilan |
+| `log_add` | Jonli logga yozuv (ofisda gap bulutchasi) |
+
+`account_status` — ro'yxatda yo'q qo'shimcha asbob: Claude Chrome'da ko'rganini (kirilgan, kirish kerak, cheklangan) yozib qo'yishi uchun.
+
+### Vazifa holatlari
+
+```
+queued ──▶ in_progress ──▶ done                      (kontent, tahlil, tadqiqot)
+                     └──▶ awaiting_approval ──▶ approved ──▶ done   (nashr, izoh javobi, DM — majburiy)
+                                         └──▶ rejected ──▶ in_progress (qayta ishlash)
+```
+
+`approved` va `rejected` holatlariga faqat `approval_resolve` (yoki veb-ilovadagi tugma) orqali o'tiladi.
+
+## Xavfsizlik qoidalari (kodda majburlanadi)
+
+| Qoida | Qayerda |
+|---|---|
+| Nashr, izoh javobi, DM avval "Tasdiq kutmoqda"ga tushadi; tasdiqsiz `done` bo'lmaydi | `packages/db/src/services/tasks.ts` |
+| Claude o'zini o'zi tasdiqlay olmaydi: MCP orqali tasdiqlash uchun veb-ilovada ko'rinadigan bir martalik 6 belgili kod kerak (prompt-injection himoyasi). Kod MCP javoblarida hech qachon qaytmaydi | `services/approvals.ts`, `tasks.publicTask` |
+| Kommentator faqat o'z postidagi izohga (`own_post_comment`) yoki kelgan DM'ga (`incoming_dm`) javob qoralaydi, `targetOwner` akkauntning o'zi bo'lishi shart. Layk, follow, begona izoh, ommaviy DM uchun vazifa turi umuman yo'q | `services/tasks.ts`, `shared/enums.ts` |
+| Har akkaunt uchun kunlik limit (nashr, javob, DM) va harakatlar orasida tasodifiy pauza (`waitSeconds`) | `services/approvals.ts` |
+| Instagram paroli saqlanmaydi va so'ralmaydi; sessiya foydalanuvchining Chrome profilida | sxemada parol maydoni yo'q |
+| Parollar scrypt bilan xeshlanadi; sessiya, OAuth kod va tokenlar bazada faqat SHA-256 xeshi sifatida saqlanadi | `packages/db/src/crypto.ts` |
+
+## Bosqichlar
+
+1. ✅ Monorepo, DB sxemasi, auth, MCP yadrosi (akkauntlar, vazifalar, rollar), OAuth konnektor.
+2. Ofis simulyatsiyasi (canvas, yo'lak grafi + Dijkstra, gap bulutchalari) `office_state` bilan jonli.
+3. Chrome oqimi: akkaunt almashtirish, post qoralama, statistika o'qish, tasdiqlash; Graph API orqali nashr.
+4. Kalendar, analitika, rejalashtirilgan vazifalar.
+5. Ovoz (ElevenLabs), tariflar va to'lov (Payme/Click).
